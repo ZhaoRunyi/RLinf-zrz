@@ -143,6 +143,7 @@ class EmbodiedRunner:
             self.actor.set_global_step(self.global_step)
             self.rollout.set_global_step(self.global_step)
 
+            # RL Training
             with self.timer("step"):
                 with self.timer("sync_weights"):
                     self.update_rollout_weights()
@@ -173,7 +174,7 @@ class EmbodiedRunner:
 
                 self.global_step += 1
 
-                run_val, save_model, is_train_end = check_progress(
+                _, save_model, _ = check_progress(
                     self.global_step,
                     self.max_steps,
                     self.cfg.runner.val_check_interval,
@@ -193,6 +194,11 @@ class EmbodiedRunner:
                 if save_model:
                     self._save_checkpoint()
 
+            env_results_list = [
+                result for result in env_handle.wait() if result is not None
+            ]
+            env_metrics = compute_evaluate_metrics(env_results_list)
+
             time_metrics = self.timer.consume_durations()
             env_results_list = [
                 results for results in env_handle.wait() if results is not None
@@ -200,14 +206,11 @@ class EmbodiedRunner:
             env_metrics = compute_evaluate_metrics(env_results_list)
 
             time_metrics = {f"time/{k}": v for k, v in time_metrics.items()}
-            rollout_metrics = {
-                f"rollout/{k}": v for k, v in actor_rollout_metrics[0].items()
-            }
             env_metrics = {f"env/{k}": v for k, v in env_metrics.items()}
-            time_metrics = {f"time/{k}": v for k, v in time_metrics.items()}
-            training_metrics = {
-                f"train/{k}": v for k, v in actor_training_metrics[0].items()
+            rollout_metrics = {
+                f"rollout/{k}": v for k, v in actor_metrics[0][0].items()
             }
+            training_metrics = {f"train/{k}": v for k, v in actor_metrics[0][1].items()}
             self.metric_logger.log(env_metrics, _step)
             self.metric_logger.log(rollout_metrics, _step)
             self.metric_logger.log(time_metrics, _step)

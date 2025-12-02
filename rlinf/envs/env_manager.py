@@ -15,12 +15,14 @@
 import ctypes
 import gc
 import os
+import pkgutil
 import subprocess
 import sys
 from typing import Optional
 
 import torch
 import torch.multiprocessing as mp
+from omegaconf import DictConfig
 
 from rlinf.scheduler import WorkerInfo
 
@@ -159,6 +161,10 @@ def recursive_to_own(obj):
 
 
 class EnvManager:
+    """Manager for environment, supports offloading to separate process."""
+
+    ENV_IMPORTER_REGISTRY = {}
+
     def __init__(
         self,
         cfg,
@@ -170,7 +176,18 @@ class EnvManager:
         worker_info: WorkerInfo,
         enable_offload: bool = False,
     ):
-        self.cfg = cfg
+        """Initialize EnvManager.
+
+        Args:
+            cfg (DictConfig): Full configuration dict.
+            rank (int): Rank of the current process.
+            seed_offset (int): Seed offset for randomness.
+            total_num_processes (int): Total number of processes.
+            env_type (str): Environment class type.
+            is_eval (bool): Whether the environment is for evaluation.
+            enable_offload (bool): Whether to offload environment to a separate process.
+        """
+        self.cfg = cfg.env.train if not is_eval else cfg.env.eval
         self.rank = rank
         self.num_envs = num_envs
         self.seed_offset = seed_offset
@@ -180,6 +197,18 @@ class EnvManager:
         self.command_queue: Optional[mp.Queue] = None
         self.result_queue: Optional[mp.Queue] = None
         self.state_buffer: Optional[bytes] = None
+
+        self.import_envs()
+        assert env_type in self.ENV_IMPORTER_REGISTRY, (
+            f"Environment type '{env_type}' not registered. Please make sure it's implemented and its importer is registered via EnvManager.register_env in the environment's __init__.py"
+        )
+        env_classes = self.ENV_IMPORTER_REGISTRY[env_type](self.cfg)
+        if isinstance(env_classes, tuple):
+            env_train_cls, env_eval_cls = env_classes
+        else:
+            env_train_cls = env_eval_cls = env_classes
+
+        env_cls = env_eval_cls if is_eval else env_train_cls
 
         if enable_offload:
             import importlib

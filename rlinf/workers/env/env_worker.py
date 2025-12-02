@@ -28,7 +28,22 @@ from rlinf.utils.placement import HybridComponentPlacement
 
 
 class EnvWorker(Worker):
+    """The EnvWorker is responsible for controlling the embodied environments like simulators or physical robots.
+
+    It calls the corresponding gym env's step function to generate observations, rewards, and done signals based on the actions received from the RolloutWorker, and sends them back to the RolloutWorker.
+
+    The EnvWorker supports running multiple environment instances in parallel to improve data collection efficiency.
+    The main entry point is the `interact` method, which performs environment interactions for a specified number of steps (called chunk_step) and put the collected environment metrics into an output channel to the RolloutWorker.
+
+    Specially, the EnvWorker supports pipeline rollout process, where the parallel environment instances are further divided into multiple stages. Each stage interacts with the environment sequentially, while different stages can run in parallel. This design helps to further improve the efficiency of data collection.
+    """
+
     def __init__(self, cfg: DictConfig):
+        """Initialize the EnvWorker.
+
+        Args:
+            cfg (DictConfig): The configuration for the EnvWorker.
+        """
         Worker.__init__(self)
 
         self.cfg = cfg
@@ -45,11 +60,20 @@ class EnvWorker(Worker):
         self.last_truncations_list = []
         self.last_intervened_info_list = []
 
-        self._component_placement = HybridComponentPlacement(cfg, Cluster())
+        self.train_batch_size_per_stage = self.cfg.env.train.num_envs
+        self.train_num_groups_per_stage = self.cfg.env.train.num_group
+        self.train_group_size = self.cfg.env.train.group_size
+
+        self.eval_batch_size_per_stage = self.cfg.env.eval.num_envs
+        self.eval_num_groups_per_stage = self.cfg.env.eval.num_group
+        self.eval_group_size = self.cfg.env.eval.group_size
+
+        # Sanity checks
         assert (
-            self._component_placement.get_world_size("rollout")
-            % self._component_placement.get_world_size("env")
-            == 0
+            self.train_batch_size_per_stage
+            == self.train_num_groups_per_stage * self.train_group_size
+        ), (
+            f"The train num_envs {self.train_batch_size_per_stage} does not match num_groups ({self.train_num_groups_per_stage}) * group_size ({self.train_group_size})."
         )
         # gather_num: number of rollout for each env process
         self.gather_num = self._component_placement.get_world_size(
@@ -71,6 +95,7 @@ class EnvWorker(Worker):
             )
 
     def init_worker(self):
+        """Create the environment instances for the EnvWorker and start the environments."""
         enable_offload = self.cfg.env.enable_offload
 
         train_env_cls = get_env_cls(self.cfg.env.train.env_type, self.cfg.env.train)
@@ -129,12 +154,10 @@ class EnvWorker(Worker):
                 self.last_intervened_info_list.append((None, None))
                 self.env_list[i].stop_env()
 
-    def env_interact_step(
+    def _env_interact_step(
         self, chunk_actions: torch.Tensor, stage_id: int
     ) -> tuple[EnvOutput, dict[str, Any]]:
-        """
-        This function is used to interact with the environment.
-        """
+        """A single interact step with the environment."""
         chunk_actions = prepare_actions(
             raw_chunk_actions=chunk_actions,
             env_type=self.cfg.env.train.env_type,
@@ -189,12 +212,10 @@ class EnvWorker(Worker):
         )
         return env_output, env_info
 
-    def env_evaluate_step(
+    def _env_evaluate_step(
         self, raw_actions: torch.Tensor, stage_id: int
     ) -> tuple[EnvOutput, dict[str, Any]]:
-        """
-        This function is used to evaluate the environment.
-        """
+        """A single evaluate step with the environment."""
         chunk_actions = prepare_actions(
             raw_chunk_actions=raw_actions,
             env_type=self.cfg.env.train.env_type,
@@ -224,6 +245,10 @@ class EnvWorker(Worker):
             final_obs=infos["final_observation"]
             if "final_observation" in infos
             else None,
+            worker_rank=self._rank,
+            stage_id=stage_id,
+            num_groups=self.eval_num_groups_per_stage,
+            group_size=self.eval_group_size,
         )
         return env_output, env_info
 
@@ -236,11 +261,26 @@ class EnvWorker(Worker):
                     key=f"{gather_id + self._rank * self.gather_num}_{mode}",
                 )
             )
-        chunk_action = np.concatenate(chunk_action, axis=0)
-        return chunk_action
+            self.last_dones_list.append(dones)
+            final_obs = infos.get("final_observation", None)
+        else:
+            obs = self.last_obs_list[stage_id]
+            dones = self.last_dones_list[stage_id]
+            final_obs = None
 
-    def finish_rollout(self, mode="train"):
-        # reset
+        return EnvOutput(
+            env_type=self.env_type,
+            obs=obs,
+            dones=dones,
+            final_obs=final_obs,
+            worker_rank=self._rank,
+            stage_id=stage_id,
+            num_groups=self.train_num_groups_per_stage,
+            group_size=self.train_group_size,
+        )
+
+    def _finish_rollout(self, mode="train"):
+        """Finish the rollout process by flushing videos and updating reset states."""
         if mode == "train":
             if self.cfg.env.train.video_cfg.save_video:
                 for i in range(self.stage_num):
@@ -305,6 +345,7 @@ class EnvWorker(Worker):
         )
 
         env_metrics = defaultdict(list)
+        self.device_lock.acquire()
         for epoch in range(self.cfg.algorithm.rollout_epoch):
             env_output_list = []
             if not self.cfg.env.train.auto_reset:
@@ -358,6 +399,8 @@ class EnvWorker(Worker):
                     )
                     self.send_env_batch(output_channel, env_output.to_dict())
                     env_output_list[stage_id] = env_output
+
+                    # Collect environment info metrics
                     for key, value in env_info.items():
                         if (
                             not self.cfg.env.train.auto_reset
@@ -389,6 +432,8 @@ class EnvWorker(Worker):
 
         for key, value in env_metrics.items():
             env_metrics[key] = torch.cat(value, dim=0).contiguous().cpu()
+
+        self.device_lock.release()
 
         return env_metrics
 

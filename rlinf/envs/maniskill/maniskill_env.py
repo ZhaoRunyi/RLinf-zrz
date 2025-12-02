@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import importlib
 import os
 from typing import Optional, OrderedDict, Union
 
@@ -31,6 +32,17 @@ from omegaconf import open_dict
 from omegaconf.omegaconf import OmegaConf
 
 __all__ = ["ManiskillEnv"]
+
+
+def import_all_tasks():
+    package_name = __package__ + ".tasks"
+    package_path = pathlib.Path(__file__).parent / "tasks"
+
+    for _, module_name, _ in pkgutil.iter_modules([str(package_path)]):
+        importlib.import_module(f"{package_name}.{module_name}")
+
+
+import_all_tasks()
 
 
 def extract_termination_from_info(info, num_envs, device):
