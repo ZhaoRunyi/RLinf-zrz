@@ -88,6 +88,10 @@ class MultiStepRolloutWorker(Worker):
         model_dict = torch.load(load_path)
         self.hf_model.load_state_dict(model_dict)
 
+    def load_checkpoint(self, load_path):
+        model_dict = torch.load(load_path)
+        self.hf_model.load_state_dict(model_dict)
+
     def setup_sample_params(self):
         """Setup sampling parameters for rollout."""
         # length parameters for rollout
@@ -389,11 +393,11 @@ class MultiStepRolloutWorker(Worker):
         if hasattr(self.hf_model, "set_global_step"):
             self.hf_model.set_global_step(global_step)
 
-    def get_batch(self, input_channel: Channel, num_groups: int):
-        """Get a batch of environment outputs from the input channel."""
+    def get_batch(self, input_channel: Channel, num_group_envs: int):
+        """Get a batch of group environment outputs from the input channel."""
         env_outputs: list[EnvOutput] = []
         env_batches: list[dict[str, torch.Tensor]] = []
-        for _ in range(num_groups):
+        for _ in range(num_group_envs):
             env_output: EnvOutput = input_channel.get(key=self.get_batch_cnt)
             env_outputs.append(env_output)
             env_batches.append(env_output.to_batch())
@@ -406,35 +410,35 @@ class MultiStepRolloutWorker(Worker):
         output_channel: Channel,
         chunk_actions: torch.Tensor | list | dict,
         env_outputs: list[EnvOutput],
-        num_groups: int,
+        num_group_envs: int,
     ):
         """Put actions into the output channel to send to the environment.
 
         It first splits the actions according to the number of environment groups,
-        then sends each split action to the corresponding environment group based on the env_outputs' worker_rank and stage_id.
-        A group ID is also sent along with the action to identify which group the action belongs to.
+        then sends each split action to the corresponding environment based on the env_outputs' worker_rank and stage_id.
+        An env ID is also sent along with the action to identify which env the action belongs to.
 
         Args:
             output_channel (Channel): Channel to send actions to the environment.
             chunk_actions (torch.Tensor | list | dict): Actions to be sent to the environment.
-            env_outputs (list[EnvOutput]): List of EnvOutput corresponding to each environment group.
-            num_groups (int): Number of environment groups.
+            env_outputs (list[EnvOutput]): List of EnvOutput corresponding to each environment.
+            num_group_envs (int): Number of group environment.
         """
-        split_actions = EnvOutput.split_value(chunk_actions, num_groups)
-        assert len(env_outputs) == num_groups, (
-            f"Number of env outputs {len(env_outputs)} does not match the num_groups per stage in rollout {num_groups}"
+        split_actions = EnvOutput.split_value(chunk_actions, split_size=num_group_envs)
+        assert len(env_outputs) == num_group_envs, (
+            f"Number of env outputs {len(env_outputs)} does not match the num_group_envs per stage in rollout {num_group_envs}"
         )
         for action, env_output in zip(split_actions, env_outputs):
-            assert env_output.num_groups == 1, (
-                "The put_actions should only put the actions for one env group."
+            assert env_output.num_group_envs == 1, (
+                "The put_actions should only put the actions for one group env number."
             )
-            assert len(env_output.group_ids) == 1, (
-                "The put_actions should only put the actions for one env group."
+            assert len(env_output.group_env_ids) == 1, (
+                "The put_actions should only put the actions for one group env number."
             )
             # The key is (worker_rank, stage_id) to ensure the action is sent to the correct env worker and stage
-            # The group ID is not added to the key but sent as part of the item to avoid creating too many queues in the channel (each key creates a separate queue), because num_groups can be large while num_pipeline_stages and env worker size are relatively small.
+            # The group env ID is not added to the key but sent as part of the item to avoid creating too many queues in the channel (each key creates a separate queue), because num_group_envs can be large while num_pipeline_stages and env worker size are relatively small.
             output_channel.put(
-                item=(env_output.group_ids[0], action),
+                item=(env_output.group_env_ids[0], action),
                 key=(env_output.worker_rank, env_output.stage_id),
             )
 
@@ -444,6 +448,7 @@ class MultiStepRolloutWorker(Worker):
         send_num = self.placement.get_world_size("rollout") * self.num_pipeline_stages
         recv_num = self.placement.get_world_size("actor")
         split_num = compute_split_num(recv_num, send_num)
+        # Split only along batch dimension, keep time dimension as-is.
         splitted_rollout_result = self.buffer_list[stage_id].to_splitted_dict(split_num)
         for i in range(split_num):
             actor_channel.put(item=splitted_rollout_result[i])
@@ -461,8 +466,14 @@ class MultiStepRolloutWorker(Worker):
         if self.enable_offload:
             self._load_model()
         self.buffer_list = [
-            EmbodiedRolloutResult() for _ in range(self.num_pipeline_stages)
+            EmbodiedRolloutResult(rollout_epoch=self.cfg.algorithm.rollout_epoch)
+            for _ in range(self.num_pipeline_stages)
         ]
+
+        n_chunk_steps = (
+            self.cfg.env.train.max_episode_steps
+            // self.cfg.actor.model.num_action_chunks
+        )
 
         self.device_lock.acquire()
         for _ in tqdm(
@@ -470,39 +481,55 @@ class MultiStepRolloutWorker(Worker):
             desc="Generating Rollout Epochs",
             disable=(self._rank != 0),
         ):
-            for _ in range(self.cfg.algorithm.n_chunk_steps):
+            for _ in range(n_chunk_steps):
                 for stage_id in range(self.num_pipeline_stages):
                     # Get env output
                     self.device_lock.release()  # Release lock to allow EnvWorker to run
                     env_batch, env_outputs = self.get_batch(
-                        input_channel, self.train_num_groups_per_stage
+                        input_channel, self.train_num_group_envs_per_stage
                     )
                     self.device_lock.acquire()  # Re-acquire lock for prediction
 
-                    # Update buffer and predict actions
-                    self.update_env_output(stage_id, env_batch)
+                    dones, rewards = self.get_dones_and_rewards(env_batch)
+
+                    # Predict actions
                     with self.worker_timer():
                         actions, result = self.predict(env_batch["obs"])
-                    self.buffer_list[stage_id].append_result(result)
+
+                    chunk_step_result = ChunkStepResult(
+                        prev_logprobs=result["prev_logprobs"],
+                        prev_values=result["prev_values"],
+                        dones=dones,
+                        rewards=rewards,  # the first step is reset step, reward is none, which will not be appended to the buffer
+                        forward_inputs=result["forward_inputs"],
+                    )
+                    self.buffer_list[stage_id].append_result(chunk_step_result)
 
                     # Send actions to env
                     self.put_actions(
                         output_channel,
                         actions,
                         env_outputs,
-                        self.train_num_groups_per_stage,
+                        self.train_num_group_envs_per_stage,
                     )
 
             for stage_id in range(self.num_pipeline_stages):
                 self.device_lock.release()  # Release lock to allow EnvWorker to run
                 env_batch, _ = self.get_batch(
-                    input_channel, self.train_num_groups_per_stage
+                    input_channel, self.train_num_group_envs_per_stage
                 )
                 self.device_lock.acquire()  # Re-acquire lock for prediction
 
-                self.update_env_output(stage_id, env_batch)
+                # Get dones and rewards from environment batch (final step of epoch)
+                dones, rewards = self.get_dones_and_rewards(env_batch)
+                self.buffer_list[stage_id].dones.append(dones)
+                self.buffer_list[stage_id].rewards.append(rewards)
+
                 with self.worker_timer():
                     actions, result = self.predict(env_batch["obs"])
+
+                # For the final step, we only need prev_values for bootstrapping
+                # This is a special case that doesn't create a full ChunkStepResult
                 if "prev_values" in result:
                     self.buffer_list[stage_id].prev_values.append(
                         result["prev_values"].cpu().contiguous()
@@ -521,15 +548,27 @@ class MultiStepRolloutWorker(Worker):
         if self.enable_offload:
             self._load_model()
 
-        for _ in range(self.cfg.algorithm.n_eval_chunk_steps):
-            for _ in range(self.num_pipeline_stages):
-                env_batch, env_outputs = self.get_batch(
-                    input_channel, self.eval_num_groups_per_stage
-                )
-                actions, _ = self.predict(env_batch["obs"], mode="eval")
-                self.put_actions(
-                    output_channel, actions, env_outputs, self.eval_num_groups_per_stage
-                )
+        n_chunk_steps = (
+            self.cfg.env.eval.max_episode_steps
+            // self.cfg.actor.model.num_action_chunks
+        )
+        for _ in tqdm(
+            range(self.cfg.algorithm.eval_rollout_epoch),
+            desc="Evaluating Rollout Epochs",
+            disable=(self._rank != 0),
+        ):
+            for _ in range(n_chunk_steps):
+                for _ in range(self.num_pipeline_stages):
+                    env_batch, env_outputs = self.get_batch(
+                        input_channel, self.eval_num_envs_per_stage
+                    )
+                    actions, _ = self.predict(env_batch["obs"], mode="eval")
+                    self.put_actions(
+                        output_channel,
+                        actions,
+                        env_outputs,
+                        self.eval_num_envs_per_stage,
+                    )
 
         if self.enable_offload:
             self._offload_model()

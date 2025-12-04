@@ -1097,26 +1097,26 @@ class EnvOutput:
 
         # Sanity check
         if self.dones is not None:
-            assert self.dones.shape[0] == self.num_groups * self.group_size, (
-                f"Dones first dimension {self.dones.shape[0]} does not match num_groups {self.num_groups} * group_size {self.group_size}."
+            assert self.dones.shape[0] == self.num_group_envs * self.group_size, (
+                f"Dones first dimension {self.dones.shape[0]} does not match num_group_envs {self.num_group_envs} * group_size {self.group_size}."
             )
         if self.rewards is not None:
-            assert self.rewards.shape[0] == self.num_groups * self.group_size, (
-                f"Rewards first dimension {self.rewards.shape[0]} does not match num_groups {self.num_groups} * group_size {self.group_size}."
+            assert self.rewards.shape[0] == self.num_group_envs * self.group_size, (
+                f"Rewards first dimension {self.rewards.shape[0]} does not match num_group_envs {self.num_group_envs} * group_size {self.group_size}."
             )
 
-        if self.group_ids is not None:
-            assert self.num_groups is not None, (
-                "num_groups must be provided if group_ids is provided."
+        if self.group_env_ids is not None:
+            assert self.num_group_envs is not None, (
+                "num_group_envs must be provided if group_env_ids is provided."
             )
-            assert len(self.group_ids) == self.num_groups, (
-                f"Length of group_ids {len(self.group_ids)} does not match num_groups {self.num_groups}."
+            assert len(self.group_env_ids) == self.num_group_envs, (
+                f"Length of group_env_ids {len(self.group_env_ids)} does not match num_group_envs {self.num_group_envs}."
             )
         else:
-            assert self.num_groups is not None and self.group_size is not None, (
-                "num_groups and group_size must be provided if group_ids is not provided."
+            assert self.num_group_envs is not None, (
+                "num_group_envs must be provided if group_env_ids is not provided."
             )
-            self.group_ids = list(range(self.num_groups))
+            self.group_env_ids = list(range(self.num_group_envs))
 
     def prepare_observations(self, obs: dict[str, Any]) -> dict[str, Any]:
         image_tensor = obs["main_images"] if "main_images" in obs else None
@@ -1139,73 +1139,75 @@ class EnvOutput:
 
     @staticmethod
     def split_value(
-        value: torch.Tensor | list | np.ndarray | dict | Any, num_groups: int
+        value: torch.Tensor | list | np.ndarray | dict | Any, split_size: int
     ):
-        """Split a value into a list of values, each contains group_size envs' data."""
+        """Split a value into a list of values, each contains single env's data."""
         if torch.is_tensor(value):
-            assert value.shape[0] % num_groups == 0, (
-                f"Value first dimension {value.shape[0]} is not divisible by num_groups {num_groups}"
+            assert value.shape[0] % split_size == 0, (
+                f"Value first dimension {value.shape[0]} is not divisible by num_groups {split_size}"
             )
-            split_values = torch.chunk(value, num_groups, dim=0)
+            split_values = torch.chunk(value, split_size, dim=0)
             return [v.contiguous() for v in split_values]
         elif isinstance(value, list) or isinstance(value, np.ndarray):
-            assert len(value) % num_groups == 0, (
-                f"Value length {len(value)} is not divisible by num_groups {num_groups}"
+            assert len(value) % split_size == 0, (
+                f"Value length {len(value)} is not divisible by split_size {split_size}"
             )
-            length_per_group = len(value) // num_groups
+            length_per_group = len(value) // split_size
             return [
                 value[i * length_per_group : (i + 1) * length_per_group]
-                for i in range(num_groups)
+                for i in range(split_size)
             ]
         elif isinstance(value, dict):
             split_dicts = []
-            for i in range(num_groups):
+            for i in range(split_size):
                 split_dict = {}
                 for k, v in value.items():
-                    split_dict[k] = EnvOutput.split_value(v, num_groups)[i]
+                    split_dict[k] = EnvOutput.split_value(v, split_size)[i]
                 split_dicts.append(split_dict)
             return split_dicts
         else:
             raise ValueError(f"Unsupported type: {type(value)}")
 
     def split_by_group(self) -> list["EnvOutput"]:
-        """Split the EnvOutput into a list of EnvOutputs, each contains group_size envs' outputs."""
-        obs_split = self.split_value(self.obs, self.num_groups)
+        """Split the EnvOutput into a list of EnvOutputs, each contains single group_env's outputs."""
+        assert self.obs is not None, "obs cannot be None"
+        obs_split = self.split_value(self.obs, self.num_group_envs)
         final_obs_split = (
-            self.split_value(self.final_obs, self.num_groups)
+            self.split_value(self.final_obs, self.num_group_envs)
             if self.final_obs is not None
             else None
         )
         dones_split = (
-            self.split_value(self.dones, self.num_groups)
+            self.split_value(self.dones, self.num_group_envs)
             if self.dones is not None
             else None
         )
         rewards_split = (
-            self.split_value(self.rewards, self.num_groups)
+            self.split_value(self.rewards, self.num_group_envs)
             if self.rewards is not None
             else None
         )
 
-        group_ids_split = (
-            self.split_value(self.group_ids, self.num_groups)
-            if self.group_ids is not None
+        group_env_ids_split = (
+            self.split_value(self.group_env_ids, self.num_group_envs)
+            if self.group_env_ids is not None
             else None
         )
 
         env_outputs = []
-        for i in range(self.num_groups):
+        for i in range(self.num_group_envs):
             env_output = EnvOutput(
-                env_type=self.env_type,
                 obs=obs_split[i],
                 final_obs=final_obs_split[i] if final_obs_split is not None else None,
                 dones=dones_split[i] if dones_split is not None else None,
                 rewards=rewards_split[i] if rewards_split is not None else None,
                 worker_rank=self.worker_rank,
                 stage_id=self.stage_id,
-                num_groups=1 if self.num_groups is not None else None,
+                num_group_envs=1 if self.num_group_envs is not None else None,
                 group_size=self.group_size,
-                group_ids=group_ids_split[i] if group_ids_split is not None else None,
+                group_env_ids=group_env_ids_split[i]
+                if group_env_ids_split is not None
+                else None,
             )
             env_outputs.append(env_output)
 
@@ -1404,6 +1406,14 @@ class EmbodiedRolloutResult:
         transition_dict = stack_list_of_dict_tensor(self.transitions)
         if len(transition_dict) > 0:
             rollout_result_dict["transitions"] = transition_dict
+
+        assert len(rollout_result_dict["dones"]) == len(
+            rollout_result_dict["prev_values"]
+        ), "dones and prev_values must have the same length"
+        assert (
+            len(rollout_result_dict["dones"])
+            == len(rollout_result_dict["rewards"]) + self.rollout_epoch
+        ), "dones length must be the length of rewards plus rollout_epoch"
 
         assert len(rollout_result_dict["dones"]) == len(
             rollout_result_dict["prev_values"]

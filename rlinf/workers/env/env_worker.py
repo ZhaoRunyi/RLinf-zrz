@@ -94,6 +94,30 @@ class EnvWorker(Worker):
                 self.cfg.env.eval.total_num_envs // self._world_size // self.stage_num
             )
 
+        # Env configurations
+        self.eval_only = getattr(self.cfg.runner, "only_eval", False)
+        self.enable_eval = self.cfg.runner.val_check_interval > 0 or self.eval_only
+        if not self.eval_only:
+            self.train_num_envs_per_stage = (
+                self.cfg.env.train.total_num_envs
+                // self._world_size
+                // self.num_pipeline_stages
+            )
+            self.train_num_group_envs_per_stage = (
+                self.train_num_envs_per_stage // self.cfg.env.train.group_size
+            )
+        if self.enable_eval:
+            self.eval_num_envs_per_stage = (
+                self.cfg.env.eval.total_num_envs
+                // self._world_size
+                // self.num_pipeline_stages
+            )
+            self.eval_num_group_envs_per_stage = (
+                self.eval_num_envs_per_stage // self.cfg.env.eval.group_size
+            )
+
+        self.env_type = cfg.env.train.simulator_type
+
     def init_worker(self):
         """Create the environment instances for the EnvWorker and start the environments."""
         enable_offload = self.cfg.env.enable_offload
@@ -247,8 +271,8 @@ class EnvWorker(Worker):
             else None,
             worker_rank=self._rank,
             stage_id=stage_id,
-            num_groups=self.eval_num_groups_per_stage,
-            group_size=self.eval_group_size,
+            num_group_envs=self.eval_num_group_envs_per_stage,
+            group_size=self.cfg.env.eval.group_size,
         )
         return env_output, env_info
 
@@ -269,14 +293,13 @@ class EnvWorker(Worker):
             final_obs = None
 
         return EnvOutput(
-            env_type=self.env_type,
             obs=obs,
             dones=dones,
             final_obs=final_obs,
             worker_rank=self._rank,
             stage_id=stage_id,
-            num_groups=self.train_num_groups_per_stage,
-            group_size=self.train_group_size,
+            num_group_envs=self.train_num_group_envs_per_stage,
+            group_size=self.cfg.env.train.group_size,
         )
 
     def _finish_rollout(self, mode="train"):
