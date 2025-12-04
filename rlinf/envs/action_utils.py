@@ -183,6 +183,11 @@ def prepare_actions(
         )
     elif env_type == "realworld":
         chunk_actions = raw_chunk_actions
+    elif simulator_type == "robocasa":
+        chunk_actions = prepare_actions_for_robocasa(
+            raw_chunk_actions=raw_chunk_actions,
+            action_dim=action_dim,
+        )
     else:
         raise NotImplementedError
 
