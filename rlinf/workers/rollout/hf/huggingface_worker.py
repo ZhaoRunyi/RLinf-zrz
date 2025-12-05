@@ -187,10 +187,15 @@ class MultiStepRolloutWorker(Worker):
                 final_values = torch.zeros_like(_final_values[:, 0])  # [bsz, ]
                 last_step_dones = dones[:, -1]  # [bsz, ]
 
-                final_values[last_step_dones] = _final_values[:, 0][last_step_dones]
-
-                # Add bootstrap value to the last step of done episodes
-                rewards[:, -1] += self.cfg.algorithm.gamma * final_values.cpu()
+                if (
+                    final_obs_list is not None
+                    and isinstance(final_obs_list, list)
+                    and batch_env_sizes is not None
+                ):
+                    final_values_all = self._compute_bootstrap_values(
+                        final_obs_list, batch_env_sizes, dones
+                    )
+                    rewards[:, -1] += self.cfg.algorithm.gamma * final_values_all
 
         if real_extracted_obs is None and hasattr(self.hf_model, "q_head"):
             real_extracted_obs = init_real_obs(extracted_obs)
@@ -396,12 +401,10 @@ class MultiStepRolloutWorker(Worker):
     def get_batch(self, input_channel: Channel, num_group_envs: int):
         """Get a batch of group environment outputs from the input channel."""
         env_outputs: list[EnvOutput] = []
-        env_batches: list[dict[str, torch.Tensor]] = []
         for _ in range(num_group_envs):
             env_output: EnvOutput = input_channel.get(key=self.get_batch_cnt)
             env_outputs.append(env_output)
-            env_batches.append(env_output.to_batch())
-        env_batch = EnvOutput.merge_batches(env_batches)
+        env_batch = EnvOutput.merge_to_batch(env_outputs)
         self.get_batch_cnt += 1
         return env_batch, env_outputs
 
