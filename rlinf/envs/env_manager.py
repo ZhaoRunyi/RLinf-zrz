@@ -211,17 +211,9 @@ class EnvManager:
         env_cls = env_eval_cls if is_eval else env_train_cls
 
         if enable_offload:
-            import importlib
+            from rlinf.envs.offload_wrapper import get_offload_env
 
-            class_name = env_cls.__name__
-            offload_module = importlib.import_module("rlinf.envs.offload_wrapper")
-            if hasattr(offload_module, class_name):
-                offload_env_cls = getattr(offload_module, class_name)
-                self.env_cls = offload_env_cls
-            else:
-                raise RuntimeError(
-                    f"Environment class {class_name} does not support offload"
-                )
+            self.env_cls = get_offload_env(env_type)
             self.env = None
         else:
             self.env_cls = env_cls
