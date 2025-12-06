@@ -322,14 +322,15 @@ class RobocasaEnv(gym.Env):
     def _wrap_obs(self, obs_list):
         extracted = self._extract_image_and_state(obs_list)
 
-        images_and_states_list = []
-        for idx in range(self.num_envs):
-            images_and_states = {
-                "base_image": extracted["base_image"][idx],
-                "wrist_image": extracted["wrist_image"][idx],
-                "state": extracted["state"][idx],
-            }
-            images_and_states_list.append(images_and_states)
+        # Return in the format expected by OpenPI model:
+        # - images: base_image (robot view) in CHW format [num_envs, 3, H, W]
+        # - wrist_images: eye_in_hand view in CHW format [num_envs, 3, H, W]
+        # - states: robot state [num_envs, state_dim]
+        # - task_descriptions: natural language task descriptions
+
+        # Convert from HWC [num_envs, H, W, 3] to CHW [num_envs, 3, H, W]
+        base_images_chw = np.transpose(extracted["base_image"], (0, 3, 1, 2))
+        wrist_images_chw = np.transpose(extracted["wrist_image"], (0, 3, 1, 2))
 
         images_and_states_tensor = to_tensor(
             list_of_dict_to_dict_of_list(images_and_states_list)
@@ -516,6 +517,14 @@ class RobocasaEnv(gym.Env):
             return reward_diff
         else:
             return reward
+
+    def update_reset_state_ids(self):
+        """Update reset state IDs for the next evaluation rollout.
+
+        For Robocasa, task IDs are already set during initialization and
+        don't need to be updated between rollouts, so this is a no-op.
+        """
+        pass
 
     def add_new_frames(self, obs, plot_infos):
         """Render video frames using observation images.
