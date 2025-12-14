@@ -111,9 +111,9 @@ _CONFIGS = [
         name="pi0_robocasa",
         model=pi0_config.Pi0Config(action_horizon=10),
         data=LeRobotRobocasaDataConfig(
-            repo_id="physical-intelligence/robocasa",
+            repo_id="assets/robocasa_lerobot_100demos_pi0",
             base_config=DataConfig(prompt_from_task=True),
-            assets=AssetsConfig(assets_dir="checkpoints/torch/pi0_robocasa/assets"),
+            assets=AssetsConfig(assets_dir="assets"),
             extra_delta_transform=False,
         ),
         weight_loader=weight_loaders.CheckpointWeightLoader(
@@ -122,6 +122,21 @@ _CONFIGS = [
         pytorch_weight_path="checkpoints/torch/pi0_base",
         num_train_steps=30_000,
     ),
+    # TrainConfig(
+    #     name="pi0_robocasa",
+    #     model=pi0_config.Pi0Config(action_horizon=10),
+    #     data=LeRobotRobocasaDataConfig(
+    #         repo_id="physical-intelligence/robocasa",
+    #         base_config=DataConfig(prompt_from_task=True),
+    #         assets=AssetsConfig(assets_dir="checkpoints/torch/pi0_robocasa/assets"),
+    #         extra_delta_transform=False,
+    #     ),
+    #     weight_loader=weight_loaders.CheckpointWeightLoader(
+    #         "checkpoints/jax/pi0_base/params"
+    #     ),
+    #     pytorch_weight_path="checkpoints/torch/pi0_base",
+    #     num_train_steps=30_000,
+    # ),
 ]
 
 
