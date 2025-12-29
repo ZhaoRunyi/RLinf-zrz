@@ -58,6 +58,15 @@ def _worker(
             for k in obs.keys():
                 _encode_obs(obs[k], buffer[k])
         return None
+    
+    def _check_success(env, env_return):
+        success = env._check_success()
+        env_return = list(env_return)
+        info = env_return[-1]
+        info["success"] = success
+        env_return[-1] = info
+        env_return = tuple(env_return)
+        return env_return
 
     parent.close()
     env = env_fn_wrapper.data()
@@ -74,6 +83,9 @@ def _worker(
                 if obs_bufs is not None:
                     _encode_obs(env_return[0], obs_bufs)
                     env_return = (None, *env_return[1:])
+                # RoboCasa step can't record success in info, check_success() must be called to 
+                if hasattr(env, "_check_success"):
+                   env_return = _check_success(env, env_return)
                 p.send(env_return)
             elif cmd == "reset":
                 # Robosuite reset can return just obs or (obs, info)

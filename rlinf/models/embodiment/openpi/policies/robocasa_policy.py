@@ -124,3 +124,14 @@ class RobocasaOutputs(transforms.DataTransformFn):
         else:
             # Default to 12D for PandaOmron
             return {"actions": actions[:, :12]}
+        # TODO XXX XXX XXX @Runyi
+        # # Auto-detect: if actions have exactly 7 or 12 dims, keep them
+        # # Otherwise, default to 7 for standard Panda arm
+        # if actions.shape[-1] in [7, 12]:
+        #     return {"actions": actions}
+        # else:
+        #     # Default to 7D for Panda arm
+        #     return {"actions": actions[:, :7]}
+
+        return {"actions": actions[:, :12]}
+

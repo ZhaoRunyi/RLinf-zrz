@@ -220,6 +220,43 @@ _CONFIGS = [
         ),
         pytorch_weight_path="checkpoints/torch/pi0_base",
     ),
+    TrainConfig(
+        name="pi0_robocasa_openrightdrawer_pytorch",
+        model=pi0_config.Pi0Config(action_horizon=5),
+        data=LeRobotRobocasaDataConfig(
+            repo_id="ZhaoRunyi/robocasa_openrightdrawer_human_lerobot",
+            assets=AssetsConfig(assets_dir="/workspace/openpi/checkpoints/pi0_robocasa_openrightdrawer_pytorch/1217_test_pytorch/10000", asset_id="assets/pi0_robocasa_openrightdrawer/ZhaoRunyi/robocasa_openrightdrawer_human_lerobot"),
+        ),
+        # policy_metadata={"reset_pose": [0, -1.5, 1.5, 0, 0, 0]},
+        pytorch_weight_path="/workspace/openpi/checkpoints/pi0_robocasa_openrightdrawer_pytorch/1217_test_pytorch/10000",
+        batch_size = 32
+    ),
+    TrainConfig(
+        name="pi0_robocasa_opendrawer_pytorch",
+        model=pi0_config.Pi0Config(action_horizon=5),
+        data=LeRobotRobocasaDataConfig(
+            repo_id="ZhaoRunyi/robocasa_openrightdrawer_human_lerobot",
+            assets=AssetsConfig(assets_dir="/workspace/openpi/checkpoints/pi0_robocasa_opendrawer_pytorch_2views/opendrawer_1222_2views_pytorch/30000", asset_id="assets/pi0_robocasa_opendrawer_pytorch_2views/ZhaoRunyi/robocasa_opendrawer_human_lerobot"),
+        ),
+        # policy_metadata={"reset_pose": [0, -1.5, 1.5, 0, 0, 0]},
+        pytorch_weight_path="/workspace/openpi/checkpoints/pi0_robocasa_opendrawer_pytorch_2views/opendrawer_1222_2views_pytorch/30000",
+        batch_size = 32
+    ),
+    # TrainConfig(
+    #     name="pi0_robocasa",
+    #     model=pi0_config.Pi0Config(action_horizon=10),
+    #     data=LeRobotRobocasaDataConfig(
+    #         repo_id="physical-intelligence/robocasa",
+    #         base_config=DataConfig(prompt_from_task=True),
+    #         assets=AssetsConfig(assets_dir="checkpoints/torch/pi0_robocasa/assets"),
+    #         extra_delta_transform=False,
+    #     ),
+    #     weight_loader=weight_loaders.CheckpointWeightLoader(
+    #         "checkpoints/jax/pi0_base/params"
+    #     ),
+    #     pytorch_weight_path="checkpoints/torch/pi0_base",
+    #     num_train_steps=30_000,
+    # ),
 ]
 
 
