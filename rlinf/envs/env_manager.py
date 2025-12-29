@@ -24,6 +24,8 @@ import torch
 import torch.multiprocessing as mp
 from omegaconf import DictConfig
 
+from rlinf.scheduler import WorkerInfo
+
 
 def force_gc_tensor(tensor):
     if not torch.is_tensor(tensor):
@@ -165,13 +167,22 @@ class EnvManager:
 
     def __init__(
         self,
+<<<<<<< HEAD
         cfg: DictConfig,
+=======
+        cfg,
+>>>>>>> zrz/bugfix/robocasa_rl_training
         rank: int,
         num_envs: int,
         seed_offset: int,
         total_num_processes: int,
+<<<<<<< HEAD
         env_type: str,
         is_eval: bool,
+=======
+        env_cls: str,
+        worker_info: WorkerInfo,
+>>>>>>> zrz/bugfix/robocasa_rl_training
         enable_offload: bool = False,
     ):
         """Initialize EnvManager.
@@ -190,6 +201,7 @@ class EnvManager:
         self.num_envs = num_envs
         self.seed_offset = seed_offset
         self.total_num_processes = total_num_processes
+        self.worker_info = worker_info
         self.process: Optional[mp.Process] = None
         self.command_queue: Optional[mp.Queue] = None
         self.result_queue: Optional[mp.Queue] = None
@@ -215,6 +227,7 @@ class EnvManager:
         else:
             self.env_cls = env_cls
             self.env = self.env_cls(
+<<<<<<< HEAD
                 self.cfg, num_envs, seed_offset, total_num_processes
             )
 
@@ -260,26 +273,34 @@ class EnvManager:
 
     def start_env(self):
         """Start simulator process with shared memory queues"""
+=======
+                self.cfg, num_envs, seed_offset, total_num_processes, worker_info
+            )
+
+    def start_env(self):
+        """Start environment process with shared memory queues"""
+>>>>>>> zrz/bugfix/robocasa_rl_training
         if self.env is not None:
             return
 
         if self.process is not None and self.process.is_alive():
-            raise RuntimeError("Simulator already running")
+            raise RuntimeError("Environment already running")
 
         self.context = mp.get_context("spawn")
         # Create shared memory queues
         self.command_queue = self.context.Queue()
         self.result_queue = self.context.Queue()
 
-        # Start simulator process
+        # Start environment process
         self.process = self.context.Process(
-            target=_simulator_worker,
+            target=_env_worker,
             args=(
                 self.cfg,
                 self.rank,
                 self.num_envs,
                 self.seed_offset,
                 self.total_num_processes,
+                self.worker_info,
                 self.env_cls,
                 self.command_queue,
                 self.result_queue,
@@ -292,14 +313,14 @@ class EnvManager:
         # Wait for initialization
         result = self.result_queue.get()
         if result["status"] != "ready":
-            raise RuntimeError(f"Simulator initialization failed: {result}")
+            raise RuntimeError(f"Environment initialization failed: {result}")
 
     def stop_env(self):
         if self.env is not None:
             return
 
         if self.process is None or not self.process.is_alive():
-            raise RuntimeError("No simulator running")
+            raise RuntimeError("No environment running")
 
         # Request state save
         self.command_queue.put({"method": "get_state", "args": [], "kwargs": {}})
@@ -335,7 +356,7 @@ class EnvManager:
 
         def method_proxy(*args, **kwargs):
             if self.process is None or not self.process.is_alive():
-                raise RuntimeError("Simulator not running")
+                raise RuntimeError("Environment not running")
 
             args = recursive_to_own(args)
             kwargs = recursive_to_own(kwargs)
@@ -357,6 +378,7 @@ class EnvManager:
             "num_envs",
             "seed_offset",
             "total_num_processes",
+            "worker_info",
             "process",
             "command_queue",
             "result_queue",
@@ -380,7 +402,7 @@ class EnvManager:
             )
 
         if self.process is None or not self.process.is_alive():
-            raise RuntimeError("Simulator not running")
+            raise RuntimeError("Environment not running")
 
         value = recursive_to_own(value)
         self.command_queue.put(
@@ -397,19 +419,20 @@ class EnvManager:
             raise Exception(result["error"])
 
 
-def _simulator_worker(
+def _env_worker(
     cfg,
     rank,
     num_envs,
     seed_offset,
     total_num_processes,
+    worker_info,
     env_cls,
     command_queue,
     result_queue,
     state_buffer,
     bind_numa=True,
 ):
-    """Worker process for simulator"""
+    """Worker process for Environment"""
     from rlinf.envs.offload_wrapper.base import EnvOffloadMixin
 
     # Set NUMA affinity for the process to match the GPU rank
@@ -421,13 +444,18 @@ def _simulator_worker(
     omegaconf_register()
 
     try:
+<<<<<<< HEAD
         simulator = env_cls(cfg, num_envs, seed_offset, total_num_processes)
         assert isinstance(simulator, EnvOffloadMixin), (
+=======
+        env = env_cls(cfg, num_envs, seed_offset, total_num_processes, worker_info)
+        assert isinstance(env, EnvOffloadMixin), (
+>>>>>>> zrz/bugfix/robocasa_rl_training
             f"Environment class {env_cls.__name__} must inherit from EnvOffloadMixin"
         )
 
         if state_buffer:
-            simulator.load_state(state_buffer)
+            env.load_state(state_buffer)
 
         # Signal ready
         result_queue.put({"status": "ready"})
@@ -447,10 +475,10 @@ def _simulator_worker(
                 if method_name == "__setattr__":
                     # Handle attribute setting
                     attr_name, attr_value = args
-                    setattr(simulator, attr_name, attr_value)
+                    setattr(env, attr_name, attr_value)
                     result_queue.put({"status": "success", "data": None})
-                elif hasattr(simulator, method_name):
-                    method = getattr(simulator, method_name)
+                elif hasattr(env, method_name):
+                    method = getattr(env, method_name)
                     assert callable(method), f"Method {method_name} is not callable"
                     result = method(*args, **kwargs)
                     result_queue.put({"status": "success", "data": result})

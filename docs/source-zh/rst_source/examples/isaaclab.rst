@@ -1,4 +1,4 @@
-基于IsaacLab模拟器的强化学习训练
+基于IsaacLab评测平台的强化学习训练
 ==============================================================
 
 .. |huggingface| image:: /_static/svg/hf-logo.svg
@@ -58,42 +58,60 @@
 依赖安装
 ---------------
 
+<<<<<<< HEAD
 isaaclab的Docker支持正在开发中，即将推出。目前，我们对现有Docker镜像进行了轻微修改以支持isaaclab。
 
 **1. 准备镜像**
  
 我们从docker安装开始，isaaclab的测试过程是基于此镜像
+=======
+**选项 1：Docker 镜像**
+
+使用 Docker 镜像 ``rlinf/rlinf:agentic-rlinf0.1-isaaclab`` 来运行实验。
+
+**选项 2：自定义环境**
+
+.. code:: bash
+
+   pip install uv
+   bash requirements/install.sh embodied --model gr00t --env isaaclab
+   source .venv/bin/activate
+
+ISAAC-SIM下载
+--------------------
+
+在使用IsaacLab之前，您需要下载并设置Isaac Sim。请按照以下说明操作：
+>>>>>>> zrz/bugfix/robocasa_rl_training
 
 .. code-block:: bash
 
-   # pull the docker image
-   docker pull rlinf/rlinf:agentic-rlinf0.1-torch2.6.0-openvla-openvlaoft-pi0
+   mkdir -p isaac_sim
+   cd isaac_sim
+   wget https://download.isaacsim.omniverse.nvidia.com/isaac-sim-standalone-5.1.0-linux-x86_64.zip
+   unzip isaac-sim-standalone-5.1.0-linux-x86_64.zip
+   rm isaac-sim-standalone-5.1.0-linux-x86_64.zip
 
-   # enter the docker
-   docker run -it --gpus all \
-   --shm-size 100g \
-   --net=host \
-   --ipc=host \
-   --pid=host \
-   -v /media:/media \
-   -v /sys:/sys \
-   -v /tmp/.X11-unix:/tmp/.X11-unix:rw \
-   -v /etc/localtime:/etc/localtime:ro \
-   -v /dev:/dev \
-   -e USE_GPU_HOST='${USE_GPU_HOST}' \
-   -e NVIDIA_DRIVER_CAPABILITIES=compute,utility,graphics \
-   -e NVIDIA_VISIBLE_DEVICES=all \
-   -e VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/nvidia_icd.json \
-   -e ACCEPT_EULA=Y \
-   -e PRIVACY_CONSENT=Y \
-   --name rlinf_isaaclab_gr00t \
-   rlinf/rlinf:agentic-rlinf0.1-torch2.6.0-openvla-openvlaoft-pi0 /bin/bash
+下载后，通过以下方式设置环境变量：
 
+<<<<<<< HEAD
 **2. RLinf安装**
+=======
+.. warning::
+
+   每次打开新终端使用Isaac Sim时都必须执行此步骤。
+
+.. code-block:: bash
+
+   source ./setup_conda_env.sh
+
+模型下载
+----------------
+>>>>>>> zrz/bugfix/robocasa_rl_training
 
 .. code-block:: bash
 
    cd /workspace
+<<<<<<< HEAD
    git clone https://github.com/RLinf/RLinf.git
 
 **3. Gr00t安装**
@@ -135,11 +153,16 @@ isaaclab的Docker支持正在开发中，即将推出。目前，我们对现有
 
    cd /workspace
    # 方法1: 用git clone
+=======
+   # 下载libero spatial少样本SFT模型（任选其一）
+   # 方法1：使用git clone
+>>>>>>> zrz/bugfix/robocasa_rl_training
    git lfs install
    git clone https://huggingface.co/RLinf/RLinf-Gr00t-SFT-Spatial
 
    # 方法2：使用huggingface-hub
    pip install huggingface-hub
+<<<<<<< HEAD
    hf download RLinf/RLinf-Gr00t-SFT-Spatial
 
 **4. IsaacLab安装**
@@ -170,6 +193,9 @@ isaaclab的Docker支持正在开发中，即将推出。目前，我们对现有
    echo 'source /workspace/IsaacLab/_isaac_sim/setup_conda_env.sh' >> /workspace/gr00t/bin/activate
 
 现在所有的安装已经完成，您现在可以开始使用基于gr00t和isaaclab的微调和测试！
+=======
+   hf download RLinf/RLinf-Gr00t-SFT-Spatial --local-dir RLinf-Gr00t-SFT-Spatial
+>>>>>>> zrz/bugfix/robocasa_rl_training
 
 运行脚本
 -------------------
@@ -189,10 +215,9 @@ isaaclab的Docker支持正在开发中，即将推出。目前，我们对现有
    rollout:
       pipeline_stage_num: 2
 
-您可以灵活配置 env、rollout 和 actor 组件的 GPU 数量。使用上述配置，您可以实现
-env 和 rollout 之间的管道重叠，以及与 actor 的共享。
+您可以灵活配置 env、rollout 和 actor 组件的 GPU 数量。
 此外，通过在配置中设置 ``pipeline_stage_num = 2``，
-您可以实现 rollout 和 actor 之间的管道重叠，提高 rollout 效率。
+您可以实现 rollout 和 env 之间的管道重叠，提高 rollout 效率。
 
 .. code:: yaml
 
@@ -288,5 +313,5 @@ gr00t上测试isaaclab中的 `Isaac-Stack-Cube-Franka-IK-Rel-Visuomotor-Cosmos-v
      logger:
        log_path: "../results"
        project_name: rlinf
-       experiment_name: "test_isaaclab"
+       experiment_name: "isaaclab_ppo_gr00t_demo"
        logger_backends: ["tensorboard", "wandb"] # tensorboard, wandb, swanlab

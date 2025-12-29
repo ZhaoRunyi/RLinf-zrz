@@ -137,7 +137,7 @@ algorithm
     use_valid_token_scale: False
 
     sampling_params:
-      use_greedy: False
+      do_sample: True
       temperature: 1.0
       top_k: 1000000
       top_p: 1.0
@@ -174,7 +174,7 @@ algorithm
 
 **sampling_params:**
 
-``algorithm.sampling_params.use_greedy``: Deterministic decoding if True.
+``algorithm.sampling_params.do_sample``: Deterministic decoding if False.
 
 ``algorithm.sampling_params.temperature``: Softmax temperature during sampling.
 
@@ -771,8 +771,8 @@ defaults
 .. code:: yaml
 
   defaults:
-    - env/train: PutCarrotOnPlateInScene
-    - env/eval: PutCarrotOnPlateInScene
+    - env/manikill_put_carrot_on_plate_in_scene@env.train
+    - env/manikill_put_carrot_on_plate_in_scene@env.eval
 
 ``defaults``: Hydra configuration inheritance. Specifies which environment configurations to load for training and evaluation.
 
@@ -923,7 +923,7 @@ rollout
 
 ``rollout.backend``: Model backend (huggingface, vllm).
 
-``rollout.pipeline_stage_num``: Number of pipeline stages for model parallelism.
+``rollout.pipeline_stage_num``: Number of pipeline stages for rollout.
 
 actor
 ~~~~~~~~~~~~~~~
@@ -1085,10 +1085,10 @@ The path is
 
 .. code:: yaml
 
-  simulator_type: libero
+  env_type: libero
   task_suite_name: libero_10
 
-``simulator_type``: Specifies the simulator type (libero for Libero benchmark).
+``env_type``: Specifies the simulator type (libero for Libero benchmark).
 
 ``task_suite_name``: Specifies the task suite (libero_10 for 10-task benchmark).
 
@@ -1129,7 +1129,11 @@ The path is
 
 ``group_size``: Number of environments per group (inherits from algorithm.group_size).
 
+<<<<<<< HEAD
 ``use_fixed_reset_state_ids``: Use fixed reset state IDs (false for randomization). Always True for GRPO, default be False for PPO (inherits from algorithm.use_fixed_reset_state_ids).
+=======
+``use_fixed_reset_state_ids``: Use fixed reset state IDs (false for randomization). Always True for GRPO, default be False for PPO.
+>>>>>>> zrz/bugfix/robocasa_rl_training
 
 **Environment Scaling**
 

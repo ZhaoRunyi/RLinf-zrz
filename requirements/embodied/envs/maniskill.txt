@@ -1,2 +1,6 @@
 
+<<<<<<< HEAD
 mani_skill @ git+https://github.com/haosulab/ManiSkill.git
+=======
+mani_skill @ git+https://github.com/haosulab/ManiSkill.git@v3.0.0b22
+>>>>>>> zrz/bugfix/robocasa_rl_training

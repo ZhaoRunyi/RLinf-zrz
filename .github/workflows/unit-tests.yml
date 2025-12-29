@@ -31,6 +31,10 @@ jobs:
       - name: Clean up
         run: |
           rm -rf .venv
+<<<<<<< HEAD
+=======
+          uv cache prune
+>>>>>>> zrz/bugfix/robocasa_rl_training
 
   unit-tests-cpu:
     runs-on: ubuntu-latest

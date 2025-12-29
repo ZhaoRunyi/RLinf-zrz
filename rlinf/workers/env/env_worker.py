@@ -20,9 +20,15 @@ import torch
 from omegaconf import DictConfig
 
 from rlinf.data.io_struct import EnvOutput
+from rlinf.envs import get_env_cls
 from rlinf.envs.action_utils import prepare_actions
 from rlinf.envs.env_manager import EnvManager
+<<<<<<< HEAD
 from rlinf.scheduler import Channel, Worker
+=======
+from rlinf.scheduler import Channel, Cluster, Worker
+from rlinf.utils.placement import HybridComponentPlacement
+>>>>>>> zrz/bugfix/robocasa_rl_training
 
 
 class EnvWorker(Worker):
@@ -47,6 +53,7 @@ class EnvWorker(Worker):
         self.cfg = cfg
         self.train_video_cnt = 0
         self.eval_video_cnt = 0
+<<<<<<< HEAD
 
         # Some EnvWorker ranks may run faster than others, leading to them putting future step data into the channel before other ranks have finished the current step.
         # This causes RolloutWorker to read data out-of-order from the channel, resulting in incorrect behavior.
@@ -84,10 +91,48 @@ class EnvWorker(Worker):
             )
 
         self.env_type = cfg.env.train.simulator_type
+=======
+        self.should_stop = False
+
+        self.env_list: list[EnvManager] = []
+        self.eval_env_list: list[EnvManager] = []
+
+        self.last_obs_list = []
+        self.last_dones_list = []
+        self.last_terminations_list = []
+        self.last_truncations_list = []
+        self.last_intervened_info_list = []
+
+        self._component_placement = HybridComponentPlacement(cfg, Cluster())
+        assert (
+            self._component_placement.get_world_size("rollout")
+            % self._component_placement.get_world_size("env")
+            == 0
+        )
+        # gather_num: number of rollout for each env process
+        self.gather_num = self._component_placement.get_world_size(
+            "rollout"
+        ) // self._component_placement.get_world_size("env")
+        # stage_num: default to 2, use for pipeline rollout process
+        self.stage_num = self.cfg.rollout.pipeline_stage_num
+
+        # Env configurations
+        self.only_eval = getattr(self.cfg.runner, "only_eval", False)
+        self.enable_eval = self.cfg.runner.val_check_interval > 0 or self.only_eval
+        if not self.only_eval:
+            self.train_num_envs_per_stage = (
+                self.cfg.env.train.total_num_envs // self._world_size // self.stage_num
+            )
+        if self.enable_eval:
+            self.eval_num_envs_per_stage = (
+                self.cfg.env.eval.total_num_envs // self._world_size // self.stage_num
+            )
+>>>>>>> zrz/bugfix/robocasa_rl_training
 
     def init_worker(self):
         """Create the environment instances for the EnvWorker and start the environments."""
         enable_offload = self.cfg.env.enable_offload
+<<<<<<< HEAD
         total_num_processes = self._world_size * self.num_pipeline_stages
 
         for stage_id in range(self.num_pipeline_stages):
@@ -135,6 +180,64 @@ class EnvWorker(Worker):
             self.last_obs_list.append(extracted_obs)
             self.last_dones_list.append(dones)
             self.train_env_list[i].stop_env()
+=======
+
+        train_env_cls = get_env_cls(self.cfg.env.train.env_type, self.cfg.env.train)
+        eval_env_cls = get_env_cls(self.cfg.env.eval.env_type, self.cfg.env.eval)
+
+        # This is a barrier to ensure all envs' initial setup upon import is done
+        # Essential for RealWorld env to ensure initial ROS node setup is done
+        self.broadcast(True, list(range(self._world_size)))
+
+        if not self.only_eval:
+            for stage_id in range(self.stage_num):
+                self.env_list.append(
+                    EnvManager(
+                        self.cfg.env.train,
+                        rank=self._rank,
+                        num_envs=self.train_num_envs_per_stage,
+                        seed_offset=self._rank * self.stage_num + stage_id,
+                        total_num_processes=self._world_size * self.stage_num,
+                        env_cls=train_env_cls,
+                        worker_info=self.worker_info,
+                        enable_offload=enable_offload,
+                    )
+                )
+        if self.enable_eval:
+            for stage_id in range(self.stage_num):
+                self.eval_env_list.append(
+                    EnvManager(
+                        self.cfg.env.eval,
+                        rank=self._rank,
+                        num_envs=self.eval_num_envs_per_stage,
+                        seed_offset=self._rank * self.stage_num + stage_id,
+                        total_num_processes=self._world_size * self.stage_num,
+                        env_cls=eval_env_cls,
+                        worker_info=self.worker_info,
+                        enable_offload=enable_offload,
+                    )
+                )
+
+        if not self.only_eval:
+            self._init_env()
+
+    def _init_env(self):
+        if self.cfg.env.train.auto_reset:
+            for i in range(self.stage_num):
+                self.env_list[i].start_env()
+                extracted_obs, _ = self.env_list[i].reset()
+                dones = (
+                    torch.zeros((self.train_num_envs_per_stage,), dtype=bool)
+                    .unsqueeze(1)
+                    .repeat(1, self.cfg.actor.model.num_action_chunks)
+                )
+                self.last_obs_list.append(extracted_obs)
+                self.last_dones_list.append(dones)
+                self.last_terminations_list.append(dones.clone())
+                self.last_truncations_list.append(dones.clone())
+                self.last_intervened_info_list.append((None, None))
+                self.env_list[i].stop_env()
+>>>>>>> zrz/bugfix/robocasa_rl_training
 
     def _env_interact_step(
         self, chunk_actions: torch.Tensor, stage_id: int
@@ -142,7 +245,11 @@ class EnvWorker(Worker):
         """A single interact step with the environment."""
         chunk_actions = prepare_actions(
             raw_chunk_actions=chunk_actions,
+<<<<<<< HEAD
             env_type=self.env_type,
+=======
+            env_type=self.cfg.env.train.env_type,
+>>>>>>> zrz/bugfix/robocasa_rl_training
             model_type=self.cfg.actor.model.model_type,
             num_action_chunks=self.cfg.actor.model.num_action_chunks,
             action_dim=self.cfg.actor.model.action_dim,
@@ -151,7 +258,11 @@ class EnvWorker(Worker):
         env_info = {}
 
         extracted_obs, chunk_rewards, chunk_terminations, chunk_truncations, infos = (
+<<<<<<< HEAD
             self.train_env_list[stage_id].chunk_step(chunk_actions)
+=======
+            self.env_list[stage_id].chunk_step(chunk_actions)
+>>>>>>> zrz/bugfix/robocasa_rl_training
         )
         chunk_dones = torch.logical_or(chunk_terminations, chunk_truncations)
         if not self.cfg.env.train.auto_reset:
@@ -171,6 +282,15 @@ class EnvWorker(Worker):
                 for key in final_info["episode"]:
                     env_info[key] = final_info["episode"][key][chunk_dones[:, -1]].cpu()
 
+        intervene_actions = (
+            infos["intervene_action"] if "intervene_action" in infos else None
+        )
+        intervene_flags = infos["intervene_flag"] if "intervene_flag" in infos else None
+        if self.cfg.env.train.auto_reset and chunk_dones.any():
+            if "intervene_action" in infos["final_info"]:
+                intervene_actions = infos["final_info"]["intervene_action"]
+                intervene_flags = infos["final_info"]["intervene_flag"]
+
         env_output = EnvOutput(
             obs=extracted_obs,
             final_obs=infos["final_observation"]
@@ -178,10 +298,17 @@ class EnvWorker(Worker):
             else None,
             rewards=chunk_rewards,
             dones=chunk_dones,
+<<<<<<< HEAD
             worker_rank=self._rank,
             stage_id=stage_id,
             num_group_envs=self.train_num_group_envs_per_stage,
             group_size=self.cfg.env.train.group_size,
+=======
+            terminations=chunk_terminations,
+            truncations=chunk_truncations,
+            intervene_actions=intervene_actions,
+            intervene_flags=intervene_flags,
+>>>>>>> zrz/bugfix/robocasa_rl_training
         )
         return env_output, env_info
 
@@ -191,7 +318,11 @@ class EnvWorker(Worker):
         """A single evaluate step with the environment."""
         chunk_actions = prepare_actions(
             raw_chunk_actions=raw_actions,
+<<<<<<< HEAD
             env_type=self.env_type,
+=======
+            env_type=self.cfg.env.train.env_type,
+>>>>>>> zrz/bugfix/robocasa_rl_training
             model_type=self.cfg.actor.model.model_type,
             num_action_chunks=self.cfg.actor.model.num_action_chunks,
             action_dim=self.cfg.actor.model.action_dim,
@@ -225,6 +356,7 @@ class EnvWorker(Worker):
         )
         return env_output, env_info
 
+<<<<<<< HEAD
     def _env_reset_step(self, stage_id: int):
         if not self.cfg.env.train.auto_reset:
             obs, infos = self.train_env_list[stage_id].reset()
@@ -233,6 +365,16 @@ class EnvWorker(Worker):
                 torch.zeros((self.train_num_envs_per_stage,), dtype=torch.bool)
                 .unsqueeze(1)
                 .repeat(1, self.cfg.actor.model.num_action_chunks)
+=======
+    def recv_chunk_actions(self, input_channel: Channel, mode="train") -> np.ndarray:
+        assert mode in ["train", "eval"], f"{mode=} is not supported"
+        chunk_action = []
+        for gather_id in range(self.gather_num):
+            chunk_action.append(
+                input_channel.get(
+                    key=f"{gather_id + self._rank * self.gather_num}_{mode}",
+                )
+>>>>>>> zrz/bugfix/robocasa_rl_training
             )
             self.last_dones_list.append(dones)
             final_obs = infos.get("final_observation", None)
@@ -255,6 +397,7 @@ class EnvWorker(Worker):
         """Finish the rollout process by flushing videos and updating reset states."""
         if mode == "train":
             if self.cfg.env.train.video_cfg.save_video:
+<<<<<<< HEAD
                 for i in range(self.num_pipeline_stages):
                     self.train_env_list[i].flush_video()
             for i in range(self.num_pipeline_stages):
@@ -313,12 +456,73 @@ class EnvWorker(Worker):
 
         n_chunk_steps = (
             self.cfg.env.train.max_episode_steps
+=======
+                for i in range(self.stage_num):
+                    self.env_list[i].flush_video()
+            for i in range(self.stage_num):
+                self.env_list[i].update_reset_state_ids()
+        elif mode == "eval":
+            if self.cfg.env.eval.video_cfg.save_video:
+                for i in range(self.stage_num):
+                    self.eval_env_list[i].flush_video()
+            if not self.cfg.env.eval.auto_reset:
+                for i in range(self.stage_num):
+                    self.eval_env_list[i].update_reset_state_ids()
+
+    def split_env_batch(self, env_batch, gather_id, mode):
+        env_batch_i = {}
+        for key, value in env_batch.items():
+            if isinstance(value, torch.Tensor):
+                env_batch_i[key] = value.chunk(self.gather_num, dim=0)[
+                    gather_id
+                ].contiguous()
+            elif isinstance(value, list):
+                length = len(value)
+                if mode == "train":
+                    assert length == self.train_num_envs_per_stage, (
+                        f"Mode {mode}: key '{key}' expected length {self.train_num_envs_per_stage} "
+                        f"(train_num_envs_per_stage), got {length}"
+                    )
+                elif mode == "eval":
+                    assert length == self.eval_num_envs_per_stage, (
+                        f"Mode {mode}: key '{key}' expected length {self.eval_num_envs_per_stage} "
+                        f"(eval_num_envs_per_stage), got {length}"
+                    )
+                env_batch_i[key] = value[
+                    gather_id * length // self.gather_num : (gather_id + 1)
+                    * length
+                    // self.gather_num
+                ]
+            elif isinstance(value, dict):
+                env_batch_i[key] = self.split_env_batch(value, gather_id, mode)
+            else:
+                env_batch_i[key] = value
+        return env_batch_i
+
+    def send_env_batch(self, output_channel: Channel, env_batch, mode="train"):
+        # split env_batch into num_processes chunks, each chunk contains gather_num env_batch
+        assert mode in ["train", "eval"], f"{mode=} is not supported"
+        for gather_id in range(self.gather_num):
+            env_batch_i = self.split_env_batch(env_batch, gather_id, mode)
+            output_channel.put(
+                item=env_batch_i,
+                key=f"{gather_id + self._rank * self.gather_num}_{mode}",
+            )
+
+    def interact(self, input_channel: Channel, output_channel: Channel):
+        for env in self.env_list:
+            env.start_env()
+
+        n_chunk_steps = (
+            self.cfg.env.train.max_steps_per_rollout_epoch
+>>>>>>> zrz/bugfix/robocasa_rl_training
             // self.cfg.actor.model.num_action_chunks
         )
 
         env_metrics = defaultdict(list)
         self.device_lock.acquire()
         for epoch in range(self.cfg.algorithm.rollout_epoch):
+<<<<<<< HEAD
             env_output_list: list[EnvOutput] = []
 
             # Reset environments at the beginning of each epoch
@@ -345,6 +549,59 @@ class EnvWorker(Worker):
 
                     # Put the results into the output channel
                     self.put_batch(output_channel, env_output)
+=======
+            env_output_list = []
+            if not self.cfg.env.train.auto_reset:
+                for stage_id in range(self.stage_num):
+                    self.env_list[stage_id].is_start = True
+                    extracted_obs, infos = self.env_list[stage_id].reset()
+                    dones = (
+                        torch.zeros((self.train_num_envs_per_stage,), dtype=bool)
+                        .unsqueeze(1)
+                        .repeat(1, self.cfg.actor.model.num_action_chunks)
+                    )
+                    terminations = dones.clone()
+                    truncations = dones.clone()
+
+                    env_output = EnvOutput(
+                        obs=extracted_obs,
+                        dones=dones,
+                        terminations=terminations,
+                        truncations=truncations,
+                        final_obs=infos["final_observation"]
+                        if "final_observation" in infos
+                        else None,
+                        intervene_actions=None,
+                        intervene_flags=None,
+                    )
+                    env_output_list.append(env_output)
+            else:
+                self.num_done_envs = 0
+                self.num_succ_envs = 0
+                for stage_id in range(self.stage_num):
+                    env_output = EnvOutput(
+                        obs=self.last_obs_list[stage_id],
+                        rewards=None,
+                        dones=self.last_dones_list[stage_id],
+                        terminations=self.last_terminations_list[stage_id],
+                        truncations=self.last_truncations_list[stage_id],
+                        intervene_actions=self.last_intervened_info_list[stage_id][0],
+                        intervene_flags=self.last_intervened_info_list[stage_id][1],
+                    )
+                    env_output_list.append(env_output)
+
+            for stage_id in range(self.stage_num):
+                env_output: EnvOutput = env_output_list[stage_id]
+                self.send_env_batch(output_channel, env_output.to_dict())
+
+            for _ in range(n_chunk_steps):
+                for stage_id in range(self.stage_num):
+                    raw_chunk_actions = self.recv_chunk_actions(input_channel)
+                    env_output, env_info = self.env_interact_step(
+                        raw_chunk_actions, stage_id
+                    )
+                    self.send_env_batch(output_channel, env_output.to_dict())
+>>>>>>> zrz/bugfix/robocasa_rl_training
                     env_output_list[stage_id] = env_output
 
                     # Collect environment info metrics
@@ -362,9 +619,25 @@ class EnvWorker(Worker):
 
             self.last_obs_list = [env_output.obs for env_output in env_output_list]
             self.last_dones_list = [env_output.dones for env_output in env_output_list]
+<<<<<<< HEAD
             self._finish_rollout()
 
         for env in self.train_env_list:
+=======
+            self.last_truncations_list = [
+                env_output.truncations for env_output in env_output_list
+            ]
+            self.last_terminations_list = [
+                env_output.terminations for env_output in env_output_list
+            ]
+            self.last_intervened_info_list = [
+                (env_output.intervene_actions, env_output.intervene_flags)
+                for env_output in env_output_list
+            ]
+            self.finish_rollout()
+
+        for env in self.env_list:
+>>>>>>> zrz/bugfix/robocasa_rl_training
             env.stop_env()
 
         for key, value in env_metrics.items():
@@ -375,6 +648,7 @@ class EnvWorker(Worker):
         return env_metrics
 
     def evaluate(self, input_channel: Channel, output_channel: Channel):
+<<<<<<< HEAD
         """The main entry point for environment evaluation.
 
         Args:
@@ -411,14 +685,55 @@ class EnvWorker(Worker):
                         raw_chunk_actions, stage_id
                     )
 
+=======
+        eval_metrics = defaultdict(list)
+
+        for stage_id in range(self.stage_num):
+            self.eval_env_list[stage_id].start_env()
+
+        n_chunk_steps = (
+            self.cfg.env.eval.max_steps_per_rollout_epoch
+            // self.cfg.actor.model.num_action_chunks
+        )
+        for _ in range(self.cfg.algorithm.eval_rollout_epoch):
+            for stage_id in range(self.stage_num):
+                self.eval_env_list[stage_id].is_start = True
+                extracted_obs, infos = self.eval_env_list[stage_id].reset()
+                env_output = EnvOutput(
+                    obs=extracted_obs,
+                    final_obs=infos["final_observation"]
+                    if "final_observation" in infos
+                    else None,
+                )
+                self.send_env_batch(output_channel, env_output.to_dict(), mode="eval")
+
+            for eval_step in range(n_chunk_steps):
+                for stage_id in range(self.stage_num):
+                    raw_chunk_actions = self.recv_chunk_actions(
+                        input_channel, mode="eval"
+                    )
+                    env_output, env_info = self.env_evaluate_step(
+                        raw_chunk_actions, stage_id
+                    )
+
+>>>>>>> zrz/bugfix/robocasa_rl_training
                     for key, value in env_info.items():
                         eval_metrics[key].append(value)
                     if eval_step == n_chunk_steps - 1:
                         continue
+<<<<<<< HEAD
                     self.put_batch(output_channel, env_output)
 
             self._finish_rollout(mode="eval")
         for stage_id in range(self.num_pipeline_stages):
+=======
+                    self.send_env_batch(
+                        output_channel, env_output.to_dict(), mode="eval"
+                    )
+
+            self.finish_rollout(mode="eval")
+        for stage_id in range(self.stage_num):
+>>>>>>> zrz/bugfix/robocasa_rl_training
             self.eval_env_list[stage_id].stop_env()
 
         for key, value in eval_metrics.items():

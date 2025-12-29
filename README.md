@@ -30,8 +30,11 @@ RLinf is a flexible and scalable open-source infrastructure designed for post-tr
 
 
 ## What's NEW!
-- [2025/11] 🔥 RLinf supports reinforcement learning fine-tuning for [IsaacLab](https://github.com/isaac-sim/IsaacLab). Doc: [RL on IsaacLab](https://rlinf.readthedocs.io/en/latest/rst_source/examples/isaaclab.html) 
-- [2025/11] 🔥 RLinf supports reinforcement learning fine-tuning for [Behavior 1k](https://github.com/StanfordVL/BEHAVIOR-1K). Doc: [RL on Behavior 1k](https://rlinf.readthedocs.io/en/latest/rst_source/examples/behavior.html) 
+- [2025/12] 🔥 RLinf v0.2-pre is open-sourced. We support real-world RL with Franka. Doc: [RL on Franka in the RealWorld](https://rlinf.readthedocs.io/en/latest/rst_source/examples/franka.html).
+- [2025/12] 🔥 RLinf supports reinforcement learning fine-tuning for [RoboCasa](https://github.com/robocasa/robocasa). Doc: [RL on Robocasa](https://rlinf.readthedocs.io/en/latest/rst_source/examples/robocasa.html).
+- [2025/12] 🎉 RLinf official release of [v0.1](https://github.com/RLinf/RLinf/releases/tag/v0.1).
+- [2025/11] 🔥 RLinf supports reinforcement learning fine-tuning for [CALVIN](https://github.com/mees/calvin). Doc: [RL on CALVIN](https://rlinf.readthedocs.io/en/latest/rst_source/examples/calvin.html).
+- [2025/11] 🔥 RLinf supports reinforcement learning fine-tuning for [IsaacLab](https://github.com/isaac-sim/IsaacLab). Doc: [RL on IsaacLab](https://rlinf.readthedocs.io/en/latest/rst_source/examples/isaaclab.html). 
 - [2025/11] 🔥 RLinf supports reinforcement learning fine-tuning for [GR00T-N1.5](https://github.com/NVIDIA/Isaac-GR00T). Doc: [RL on GR00T-N1.5](https://rlinf.readthedocs.io/en/latest/rst_source/examples/gr00t.html).
 - [2025/11] 🔥 RLinf supports reinforcement learning fine-tuning for [Metaworld](https://github.com/Farama-Foundation/Metaworld). Doc: [RL on Metaworld](https://rlinf.readthedocs.io/en/latest/rst_source/examples/metaworld.html).
 - [2025/11] 🔥 RLinf supports reinforcement learning fine-tuning for [Behavior 1k](https://github.com/StanfordVL/BEHAVIOR-1K). Doc: [RL on Behavior 1k](https://rlinf.readthedocs.io/en/latest/rst_source/examples/behavior.html).
@@ -69,13 +72,14 @@ RLinf is a flexible and scalable open-source infrastructure designed for post-tr
           <li><a href="https://rlinf.readthedocs.io/en/latest/rst_source/examples/behavior.html">BEHAVIOR</a> ✅</li>
           <li><a href="https://rlinf.readthedocs.io/en/latest/rst_source/examples/metaworld.html">MetaWorld</a> ✅</li>
           <li><a href="https://rlinf.readthedocs.io/en/latest/rst_source/examples/isaaclab.html">IsaacLab</a> ✅</li>
-          <li>RoboCasa</li>
+          <li><a href="https://rlinf.readthedocs.io/en/latest/rst_source/examples/calvin.html">CALVIN</a> ✅</li>
+          <li><a href="https://rlinf.readthedocs.io/en/latest/rst_source/examples/robocasa.html">RoboCasa</a> ✅</li>
           <li>More...</li>
         </ul>
       </td>
       <td>
         <ul style="margin-left: 0; padding-left: 16px;">
-          <li>Franka Arm</li>
+          <li><a href="https://rlinf.readthedocs.io/zh-cn/latest/rst_source/examples/franka.html">Franka Arm</a> ✅</li>
           <li>More...</li>
         </ul>
       </td>
@@ -96,6 +100,7 @@ RLinf is a flexible and scalable open-source infrastructure designed for post-tr
           <li><b>Custom Models</b></li>
           <ul>
             <li>MLP-Policy ✅</li>
+            <li>CNN-Policy ✅</li>
           </ul>
         </ul>
       </td>
@@ -107,20 +112,20 @@ RLinf is a flexible and scalable open-source infrastructure designed for post-tr
             <li><a href="https://rlinf.readthedocs.io/en/latest/rst_source/tutorials/rlalg/ppo.html">PPO</a> ✅</li>
             <li><a href="https://rlinf.readthedocs.io/en/latest/rst_source/tutorials/rlalg/dapo.html">DAPO</a> ✅</li>
             <li><a href="https://rlinf.readthedocs.io/en/latest/rst_source/tutorials/rlalg/reinforce.html">Reinforce++</a> ✅</li>
-            <li>SAC</li>
+            <li><a href="https://rlinf.readthedocs.io/en/latest/rst_source/tutorials/rlalg/sac.html">SAC</a> ✅</li>
+            <li><a href="https://rlinf.readthedocs.io/en/latest/rst_source/tutorials/rlalg/crossq.html">CrossQ</a> ✅</li>
+            <li><a href="https://rlinf.readthedocs.io/en/latest/rst_source/tutorials/rlalg/rlpd.html">RLPD</a> ✅</li>
           </ul>
           <li><b>SFT</b></li>
           <ul>
-            <li>Full-parameter SFT</li>
-            <li>LoRA SFT</li>
+            <li><a href="https://rlinf.readthedocs.io/en/latest/rst_source/examples/sft.html">Full-parameter SFT</a> ✅</li>
+            <li><a href="https://rlinf.readthedocs.io/en/latest/rst_source/examples/sft.html">LoRA SFT</a> ✅</li>
           </ul>
         </ul>
       </td>
     </tr>
   </tbody>
 </table>
-  
-RLinf supports mainstream VLA models, mainstream CPU & GPU-parallel simulators via standardized Worker interfaces, and enables the first RL fine-tuning of the $\pi_{0}$ and $\pi_{0.5}$ model family with a flow-matching action expert, as shown in the above table.
 
 ### Agentic RL
 
@@ -555,16 +560,15 @@ and exhibits greater stability.
 - [X] Support for heterogeneous GPUs  
 - [ ] Support for asynchronous pipeline execution  
 - [X] Support for Mixture of Experts (MoE)  
-- [X] Support for vLLM inference backend
 
 ### 2. Application-Level Extensions
 - [X] Support for Vision-Language Models (VLMs) training  
 - [ ] Support for deep searcher agent training  
 - [ ] Support for multi-agent training  
-- [ ] Support for integration with more embodied simulators (e.g., [RoboCasa](https://github.com/robocasa/robocasa), [GENESIS](https://github.com/Genesis-Embodied-AI/Genesis), [RoboTwin](https://github.com/RoboTwin-Platform/RoboTwin))  
-- [ ] Support for more Vision Language Action models (VLAs), such as [WALL-OSS](https://huggingface.co/x-square-robot/wall-oss-flow)
+- [ ] Support for integration with more embodied simulators (e.g., [GENESIS](https://github.com/Genesis-Embodied-AI/Genesis), [RoboTwin](https://github.com/RoboTwin-Platform/RoboTwin))  
+- [ ] Support for more Vision Language Action models (VLAs) (e.g., [WALL-OSS](https://huggingface.co/x-square-robot/wall-oss-flow))
 - [ ] Support for world model   
-- [ ] Support for real-world RL embodied intelligence
+- [x] Support for real-world RL
 
 # CI Test Status
 RLinf has comprehensive CI tests for both the core components (via unit tests) and end-to-end RL training workflows of embodied, agent, and reasoning scenarios.

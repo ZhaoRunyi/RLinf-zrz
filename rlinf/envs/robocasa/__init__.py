@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+<<<<<<< HEAD
 from ..env_manager import EnvManager
 
 
@@ -20,3 +21,8 @@ def get_env_cls(env_cfg):
     from .robocasa_env import RobocasaEnv
 
     return RobocasaEnv
+=======
+from rlinf.envs.robocasa.robocasa_env import RobocasaEnv
+
+__all__ = ["RobocasaEnv"]
+>>>>>>> zrz/bugfix/robocasa_rl_training

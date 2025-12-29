@@ -1,19 +1,32 @@
+<<<<<<< HEAD
 基于RoboCasa的强化学习
 ========================
+=======
+基于RoboCasa评测平台的强化学习训练
+====================================
+>>>>>>> zrz/bugfix/robocasa_rl_training
 
 .. |huggingface| image:: /_static/svg/hf-logo.svg
    :width: 16px
    :height: 16px
    :class: inline-icon
 
+<<<<<<< HEAD
 本文档提供了在RLinf框架中使用RoboCasa基准测试进行强化学习训练任务的全面指南。
 RoboCasa是一个大规模的机器人学习仿真框架，专注于厨房环境中的操作任务，具有多样化的厨房布局、物体和操作任务。
 
 RoboCasa将真实的厨房环境与多样化的操作挑战相结合，使其成为开发可泛化机器人策略的理想基准。
+=======
+本文档提供了在RLinf框架中使用RoboCasa环境进行强化学习训练任务的全面指南。
+RoboCasa Kitchen专注于厨房环境中的操作任务，具有多样化的厨房布局、物体和操作任务。
+RoboCasa Kitchen将真实的厨房环境与多样化的操作挑战相结合，使其成为开发可泛化机器人策略的理想基准。
+
+>>>>>>> zrz/bugfix/robocasa_rl_training
 主要目标是训练能够执行以下任务的视觉-语言-动作模型:
 
 1. **视觉理解**: 处理来自多个摄像头视角的RGB图像。
 2. **语言理解**: 解释自然语言任务指令。
+<<<<<<< HEAD
 3. **操作技能**: 执行复杂的厨房任务,如拾取-放置、开关门和电器控制。
 
 环境介绍
@@ -37,6 +50,29 @@ RoboCasa将真实的厨房环境与多样化的操作挑战相结合，使其成
 **任务类别**
 
 RoboCasa提供了组织成多个类别的多样化原子任务:
+=======
+3. **操作技能**: 执行复杂的厨房任务，如拾取-放置、开关门和电器控制。
+
+环境
+----
+
+**RoboCasa环境**
+
+- **环境**: RoboCasa Kitchen厨房仿真环境(基于robosuite构建)
+- **机器人**: Panda机械臂带移动底座(PandaOmron)，配备夹爪
+- **观测**: 多视角RGB图像(机器人视角+腕部相机) + 本体感知状态
+- **动作空间**: 12维连续动作
+
+  - 3D机械臂位置增量
+  - 3D机械臂旋转增量
+  - 1D夹爪控制 (开/关)
+  - 4D底座控制
+  - 1D模式选择（控制底座/机械臂）
+
+**任务类别**
+
+RoboCasa Kitchen提供了涵盖多个类别的24个原子任务（不包含需要底座移动的NavigateKitchen原子任务）:
+>>>>>>> zrz/bugfix/robocasa_rl_training
 
 *门操作任务*:
 
@@ -78,9 +114,15 @@ RoboCasa提供了组织成多个类别的多样化原子任务:
 
 - **主相机图像** (``base_image``): 机器人左侧视角 (128×128 RGB)
 - **腕部相机图像** (``wrist_image``): 末端执行器视角相机 (128×128 RGB)
+<<<<<<< HEAD
 - **本体感知状态** (``state``): 16维向量,包含:
 
   - ``[0:2]`` 机器人底座位置 (x, y)
+=======
+- **本体感知状态** (``state``): 16维向量，包含:
+
+  - ``[0:2]`` 机器人底座位置 (x， y)
+>>>>>>> zrz/bugfix/robocasa_rl_training
   - ``[2:5]`` 填充零值
   - ``[5:9]`` 末端执行器相对于底座的四元数
   - ``[9:12]`` 末端执行器相对于底座的位置
@@ -89,8 +131,70 @@ RoboCasa提供了组织成多个类别的多样化原子任务:
 
 **数据结构**
 
+<<<<<<< HEAD
 - **图像**: 主相机RGB张量 ``[batch_size, 3, 128, 128]`` 和腕部相机 ``[batch_size, 3, 128, 128]``
 - **状态**: 本体感知状态张量 ``[batch_size, 16]``
 - **任务描述**: 自然语言指令
 - **动作**: 7维连续动作(位置、四元数、夹爪)
 - **奖励**: 基于任务完成的稀疏奖励
+=======
+- **图像**: 主相机RGB张量 ``[batch_size， 3， 128， 128]`` 和腕部相机 ``[batch_size， 3， 128， 128]``
+- **状态**: 本体感知状态张量 ``[batch_size， 16]``
+- **任务描述**: 自然语言指令
+- **动作**: 12维连续动作
+- **奖励**: 基于任务完成的稀疏奖励
+
+算法
+----
+
+**核心算法组件**
+
+1. **PPO (近端策略优化)**
+
+   - 使用GAE(广义优势估计)进行优势估计
+
+   - 带比率限制的策略裁剪
+
+   - 价值函数裁剪
+
+   - 熵正则化
+
+2. **GRPO (组相对策略优化)**
+
+   - 对于每个状态/提示，策略生成 *G* 个独立动作
+
+   - 通过减去组的平均奖励来计算每个动作的优势
+
+依赖安装
+--------
+
+方法 1：您可以使用 robocasa 的 RLinf docker 镜像 ``docker pull rlinf/rlinf:agentic-rlinf0.1-robocasa``。
+
+方法 2：通过运行以下命令直接在您的环境中安装依赖（确保您已经安装了 ``uv``）：
+
+.. code:: bash
+
+   bash requirements/install.sh embodied --model openpi --env robocasa
+   source .venv/bin/activate
+
+数据集下载
+-----------------
+
+.. code:: bash
+
+   python -m robocasa.scripts.download_kitchen_assets   # 注意: 需要下载的资源大约有5GB
+
+模型下载
+--------------
+
+.. code-block:: bash
+
+   # 下载模型（选择任一方法）
+   # 方法 1: 使用 git clone
+   git lfs install
+   git clone https://huggingface.co/RLinf/RLinf-Pi0-RoboCasa
+
+   # 方法 2: 使用 huggingface-hub
+   pip install huggingface-hub
+   hf download RLinf/RLinf-Pi0-RoboCasa --local-dir RLinf-Pi0-RoboCasa
+>>>>>>> zrz/bugfix/robocasa_rl_training

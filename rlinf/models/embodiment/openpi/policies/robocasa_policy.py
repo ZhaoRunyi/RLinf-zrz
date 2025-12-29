@@ -22,9 +22,21 @@ from openpi.models import model as _model
 def make_robocasa_example() -> dict:
     """Creates a random input example for the Robocasa policy."""
     return {
+<<<<<<< HEAD
         "observation/state": np.random.rand(8),  # eef_pos (3) + eef_quat (4) + gripper (1)
         "observation/image": np.random.randint(256, size=(3, 224, 224), dtype=np.uint8),  # base view
         "observation/wrist_image": np.random.randint(256, size=(3, 224, 224), dtype=np.uint8),  # wrist camera
+=======
+        "observation/state": np.random.rand(
+            8
+        ),  # eef_pos (3) + eef_quat (4) + gripper (1)
+        "observation/image": np.random.randint(
+            256, size=(3, 224, 224), dtype=np.uint8
+        ),  # base view
+        "observation/wrist_image": np.random.randint(
+            256, size=(3, 224, 224), dtype=np.uint8
+        ),  # wrist camera
+>>>>>>> zrz/bugfix/robocasa_rl_training
         "prompt": "do something",
     }
 
@@ -101,6 +113,10 @@ class RobocasaOutputs(transforms.DataTransformFn):
         action_dim: Target action dimension. If None, will be auto-detected from robot configuration.
                     Common values: 7 (Panda), 12 (PandaOmron)
     """
+<<<<<<< HEAD
+=======
+
+>>>>>>> zrz/bugfix/robocasa_rl_training
     action_dim: int | None = None
 
     def __call__(self, data: dict) -> dict:
@@ -108,6 +124,7 @@ class RobocasaOutputs(transforms.DataTransformFn):
 
         # If action_dim is specified, use it
         if self.action_dim is not None:
+<<<<<<< HEAD
             return {"actions": actions[:, :self.action_dim]}
 
         # Auto-detect: if actions have exactly 7 or 12 dims, keep them
@@ -117,3 +134,14 @@ class RobocasaOutputs(transforms.DataTransformFn):
         else:
             # Default to 7D for Panda arm
             return {"actions": actions[:, :7]}
+=======
+            return {"actions": actions[:, : self.action_dim]}
+
+        # Auto-detect: if actions have exactly 7 or 12 dims, keep them
+        # Otherwise, default to first 12 dims for PandaOmron
+        if actions.shape[-1] in [7, 12]:
+            return {"actions": actions}
+        else:
+            # Default to 12D for PandaOmron
+            return {"actions": actions[:, :12]}
+>>>>>>> zrz/bugfix/robocasa_rl_training

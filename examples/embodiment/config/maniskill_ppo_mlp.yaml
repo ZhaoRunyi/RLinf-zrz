@@ -1,6 +1,11 @@
 defaults:
+<<<<<<< HEAD
   - env/train: PickCube
   - env/eval: PickCube
+=======
+  - env/maniskill_pick_cube@env.train
+  - env/maniskill_pick_cube@env.eval
+>>>>>>> zrz/bugfix/robocasa_rl_training
   - model/mlp_policy@actor.model
   - training_backend/fsdp@actor.fsdp_config
   - override hydra/job_logging: stdout
@@ -24,14 +29,18 @@ runner:
   logger:
     log_path: "../results"
     project_name: rlinf
-    experiment_name: "test_openvla"
+    experiment_name: "maniskill_ppo_mlp"
     logger_backends: ["tensorboard"] # wandb, swanlab
 
   max_epochs: 1000
   max_steps: -1
 
   only_eval: False
+<<<<<<< HEAD
   eval_policy_path: null
+=======
+  eval_policy_path: null # Optional: .pt file or None, if None, will use the checkpoint in rollout.model.model_path
+>>>>>>> zrz/bugfix/robocasa_rl_training
   val_check_interval: 50
   save_interval: -1
   seq_length: 4096
@@ -68,7 +77,7 @@ algorithm:
 
   # params for rollout
   sampling_params:
-    use_greedy: False
+    do_sample: True
     temperature_train: 1.0
     temperature_eval: 0.6
     top_k: 0
@@ -86,11 +95,31 @@ env:
   group_name: "EnvGroup"
   enable_offload: False
 
+<<<<<<< HEAD
   # Override the default values in env/train or env/eval
+=======
+  # Override the default values in env/maniskill_pick_cube
+>>>>>>> zrz/bugfix/robocasa_rl_training
   train:
     total_num_envs: 1024
     auto_reset: True
     use_fixed_reset_state_ids: False
+<<<<<<< HEAD
+=======
+    max_episode_steps: 50 # max episode steps for truncation
+    max_steps_per_rollout_epoch: 50
+  eval:
+    total_num_envs: 32
+    auto_reset: True
+    ignore_terminations: True
+    max_episode_steps: 50
+    max_steps_per_rollout_epoch: 50
+    use_fixed_reset_state_ids: True
+    group_size: 1
+    video_cfg:
+      save_video: True
+      video_base_dir: ${runner.logger.log_path}/video/eval
+>>>>>>> zrz/bugfix/robocasa_rl_training
 
 rollout:
   group_name: "RolloutGroup"
@@ -121,6 +150,7 @@ actor:
     adam_beta1: 0.9
     adam_beta2: 0.999
     adam_eps: 1.0e-05
+    weight_decay: 0.01
     clip_grad: 0.5
 
   # Override the default values in training_backend/fsdp

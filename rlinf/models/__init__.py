@@ -16,7 +16,7 @@ import json
 import os
 
 import torch
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 from transformers import (
     AutoConfig,
     AutoImageProcessor,
@@ -176,6 +176,11 @@ def get_model(cfg: DictConfig, override_config_kwargs=None):
         model.to(torch_dtype)
 
     elif model_type == SupportedModel.OPENPI:
+<<<<<<< HEAD
+=======
+        import glob
+
+>>>>>>> zrz/bugfix/robocasa_rl_training
         import openpi.shared.download as download
         import openpi.transforms as transforms
         import safetensors
@@ -189,7 +194,7 @@ def get_model(cfg: DictConfig, override_config_kwargs=None):
 
         # config
         config_name = getattr(cfg.openpi, "config_name", None)
-        actor_train_config = get_openpi_config(config_name)
+        actor_train_config = get_openpi_config(config_name, model_path=model_path)
         actor_model_config = actor_train_config.model
         actor_model_config = OpenPi0Config(**actor_model_config.__dict__)
         override_config_kwargs = cfg.openpi
@@ -198,14 +203,19 @@ def get_model(cfg: DictConfig, override_config_kwargs=None):
                 actor_model_config.__dict__[key] = val
         # load model
         checkpoint_dir = download.maybe_download(str(model_path))
-        weight_path = os.path.join(checkpoint_dir, "model.safetensors")
+        weight_paths = sorted(glob.glob(os.path.join(checkpoint_dir, "*.safetensors")))
+        if not weight_paths:
+            weight_paths = [os.path.join(checkpoint_dir, "model.safetensors")]
+
         model: OpenPi0ForRLActionPrediction = OpenPi0ForRLActionPrediction(
             actor_model_config
         )
         # train expert only
         if actor_model_config.train_expert_only:
             model.freeze_vlm()
-        safetensors.torch.load_model(model, weight_path, strict=False)
+
+        for weight_path in weight_paths:
+            safetensors.torch.load_model(model, weight_path, strict=False)
         model.paligemma_with_expert.to_bfloat16_for_selected_params("bfloat16")
         # fsdp replace
         # model.paligemma_with_expert.replace_gemma_decoder_layers()
@@ -251,9 +261,10 @@ def get_model(cfg: DictConfig, override_config_kwargs=None):
         model = MLPPolicy(
             cfg.obs_dim,
             cfg.action_dim,
-            cfg.hidden_dim,
             num_action_chunks=cfg.num_action_chunks,
             add_value_head=cfg.add_value_head,
+            add_q_head=cfg.get("add_q_head", False),
+            q_head_type=cfg.get("q_head_type", "default"),
         )
     elif model_type == SupportedModel.GR00T:
         from pathlib import Path
@@ -316,6 +327,12 @@ def get_model(cfg: DictConfig, override_config_kwargs=None):
 
         if cfg.rl_head_config.disable_dropout:
             replace_dropout_with_identity(model)
+    elif cfg.model_type == "cnn_policy":
+        from .embodiment.cnn_policy import CNNConfig, CNNPolicy
+
+        model_config = CNNConfig()
+        model_config.update_from_dict(OmegaConf.to_container(cfg, resolve=True))
+        model = CNNPolicy(model_config)
     else:
         return None
     if torch.cuda.is_available():

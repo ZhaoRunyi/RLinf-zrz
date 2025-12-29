@@ -16,6 +16,7 @@ import copy
 import os
 from typing import Optional, Union
 
+<<<<<<< HEAD
 import cv2
 import gymnasium as gym
 import numpy as np
@@ -24,11 +25,23 @@ from omegaconf import OmegaConf
 from robocasa.utils.env_utils import create_env
 
 from rlinf.envs.robocasa.venv import RobocasaSubprocEnv
+=======
+import gymnasium as gym
+import numpy as np
+import robocasa  # noqa: F401 Robocasa must be imported to register envs
+import torch
+from omegaconf import OmegaConf
+
+>>>>>>> zrz/bugfix/robocasa_rl_training
 from rlinf.envs.robocasa.utils import (
     put_info_on_image,
     save_rollout_video,
     tile_images,
 )
+<<<<<<< HEAD
+=======
+from rlinf.envs.robocasa.venv import RobocasaSubprocEnv
+>>>>>>> zrz/bugfix/robocasa_rl_training
 from rlinf.envs.utils import (
     list_of_dict_to_dict_of_list,
     to_tensor,
@@ -36,16 +49,29 @@ from rlinf.envs.utils import (
 
 
 class RobocasaEnv(gym.Env):
+<<<<<<< HEAD
     def __init__(self, cfg, num_envs, seed_offset, total_num_processes):
         self.seed_offset = seed_offset
         self.cfg = cfg
         self.total_num_processes = total_num_processes
+=======
+    def __init__(self, cfg, num_envs, seed_offset, total_num_processes, worker_info):
+        self.seed_offset = seed_offset
+        self.cfg = cfg
+        self.total_num_processes = total_num_processes
+        self.worker_info = worker_info
+>>>>>>> zrz/bugfix/robocasa_rl_training
         self.seed = self.cfg.seed + seed_offset
         self._is_start = True
         self.num_envs = num_envs
         self.group_size = self.cfg.group_size
+<<<<<<< HEAD
         self.num_group = self.cfg.num_group
         self.use_fixed_reset_state_ids = cfg.get('use_fixed_reset_state_ids', False)
+=======
+        self.num_group = self.num_envs // self.group_size
+        self.use_fixed_reset_state_ids = cfg.get("use_fixed_reset_state_ids", False)
+>>>>>>> zrz/bugfix/robocasa_rl_training
 
         self.ignore_terminations = cfg.ignore_terminations
         self.auto_reset = cfg.auto_reset
@@ -55,7 +81,13 @@ class RobocasaEnv(gym.Env):
         # Get task list from config
         # Convert OmegaConf ListConfig to standard Python list
         task_names_raw = OmegaConf.to_container(cfg.task_names, resolve=True)
+<<<<<<< HEAD
         self.task_names = task_names_raw if isinstance(task_names_raw, list) else [task_names_raw]
+=======
+        self.task_names = (
+            task_names_raw if isinstance(task_names_raw, list) else [task_names_raw]
+        )
+>>>>>>> zrz/bugfix/robocasa_rl_training
         self.num_tasks = len(self.task_names)
 
         # Task descriptions
@@ -126,6 +158,16 @@ class RobocasaEnv(gym.Env):
         base_seed = self.seed
         self.env_seeds = [base_seed + i for i in range(self.num_envs)]
 
+<<<<<<< HEAD
+=======
+    def update_reset_state_ids(self):
+        """Update reset state IDs for the next rollout.
+
+        For robocasa, we use fixed seeds, so this is a no-op.
+        """
+        pass
+
+>>>>>>> zrz/bugfix/robocasa_rl_training
     def _init_env(self):
         """Initialize robocasa environments using subprocess isolation."""
         self.task_ids = []
@@ -241,7 +283,13 @@ class RobocasaEnv(gym.Env):
         episode_info["success_once"] = self.success_once.copy()
         episode_info["return"] = self.returns.copy()
         episode_info["episode_len"] = self.elapsed_steps.copy()
+<<<<<<< HEAD
         episode_info["reward"] = episode_info["return"] / np.maximum(episode_info["episode_len"], 1)
+=======
+        episode_info["reward"] = episode_info["return"] / np.maximum(
+            episode_info["episode_len"], 1
+        )
+>>>>>>> zrz/bugfix/robocasa_rl_training
         infos["episode"] = to_tensor(episode_info)
         return infos
 
@@ -291,8 +339,17 @@ class RobocasaEnv(gym.Env):
                 # Map to Pi0's expected format (inferred from dataset analysis):
                 state_16d[0:2] = base_pos[0:2]  # base x, y (z is constant)
                 # [2:5] remain zeros (padding)
+<<<<<<< HEAD
                 state_16d[5:9] = base_to_eef_quat  # end-effector quaternion relative to base
                 state_16d[9:12] = base_to_eef_pos  # end-effector position relative to base
+=======
+                state_16d[5:9] = (
+                    base_to_eef_quat  # end-effector quaternion relative to base
+                )
+                state_16d[9:12] = (
+                    base_to_eef_pos  # end-effector position relative to base
+                )
+>>>>>>> zrz/bugfix/robocasa_rl_training
                 state_16d[12:14] = gripper_qvel  # gripper joint velocities ✅ NEW!
                 state_16d[14:16] = gripper_qpos  # gripper joint positions
 
@@ -307,6 +364,7 @@ class RobocasaEnv(gym.Env):
     def _wrap_obs(self, obs_list):
         extracted = self._extract_image_and_state(obs_list)
 
+<<<<<<< HEAD
         # Return in the format expected by OpenPI model:
         # - images: base_image (robot view) in CHW format [num_envs, 3, H, W]
         # - wrist_images: eye_in_hand view in CHW format [num_envs, 3, H, W]
@@ -355,6 +413,42 @@ class RobocasaEnv(gym.Env):
 
         return actions_12d
 
+=======
+        images_and_states_list = []
+        for idx in range(self.num_envs):
+            images_and_states = {
+                "base_image": extracted["base_image"][idx],
+                "wrist_image": extracted["wrist_image"][idx],
+                "state": extracted["state"][idx],
+            }
+            images_and_states_list.append(images_and_states)
+
+        images_and_states_tensor = to_tensor(
+            list_of_dict_to_dict_of_list(images_and_states_list)
+        )
+
+        # Convert images from [H, W, C] -> [B, H, W, C]
+        full_image_tensor = torch.stack(
+            [value.clone() for value in images_and_states_tensor["base_image"]]
+        )
+        wrist_image_tensor = torch.stack(
+            [value.clone() for value in images_and_states_tensor["wrist_image"]]
+        )
+
+        states = images_and_states_tensor["state"]
+
+        # Flatten structure to match libero format
+        obs = {
+            "main_images": full_image_tensor,
+            "wrist_images": wrist_image_tensor,
+            "states": states,
+            "task_descriptions": [
+                self.task_descriptions_all[task_id] for task_id in self.task_ids
+            ],
+        }
+        return obs
+
+>>>>>>> zrz/bugfix/robocasa_rl_training
     def reset(
         self,
         env_idx: Optional[Union[int, list[int], np.ndarray]] = None,
@@ -371,10 +465,14 @@ class RobocasaEnv(gym.Env):
         raw_obs = self.env.reset(id=env_idx)
 
         obs = self._wrap_obs(raw_obs)
+<<<<<<< HEAD
         if env_idx is not None:
             self._reset_metrics(env_idx)
         else:
             self._reset_metrics()
+=======
+        self._reset_metrics(env_idx)
+>>>>>>> zrz/bugfix/robocasa_rl_training
         infos = {}
         return obs, infos
 
@@ -387,17 +485,32 @@ class RobocasaEnv(gym.Env):
             self._is_start = False
             terminations = np.zeros(self.num_envs, dtype=bool)
             truncations = np.zeros(self.num_envs, dtype=bool)
+<<<<<<< HEAD
             # Return zero rewards for the initial reset step
             zero_rewards = to_tensor(np.zeros(self.num_envs, dtype=np.float32))
 
             return obs, zero_rewards, to_tensor(terminations), to_tensor(truncations), infos
+=======
+            rewards = np.zeros(self.num_envs, dtype=np.float32)
+
+            return (
+                obs,
+                to_tensor(rewards),
+                to_tensor(terminations),
+                to_tensor(truncations),
+                infos,
+            )
+>>>>>>> zrz/bugfix/robocasa_rl_training
 
         if isinstance(actions, torch.Tensor):
             actions = actions.detach().cpu().numpy()
 
+<<<<<<< HEAD
         # Convert Pi0's 7D action to PandaOmron's 12D action
         actions = self._convert_pi0_action_to_pandaomron(actions)
 
+=======
+>>>>>>> zrz/bugfix/robocasa_rl_training
         self._elapsed_steps += 1
 
         # Use vectorized environment step (subprocess isolation avoids OpenGL issues)
@@ -406,7 +519,13 @@ class RobocasaEnv(gym.Env):
         infos = list_of_dict_to_dict_of_list(info_lists)
 
         # Extract success from infos
+<<<<<<< HEAD
         terminations = np.array([info.get('success', False) for info in info_lists]).astype(bool)
+=======
+        terminations = np.array(
+            [info.get("success", False) for info in info_lists]
+        ).astype(bool)
+>>>>>>> zrz/bugfix/robocasa_rl_training
         truncations = self._elapsed_steps >= self.cfg.max_episode_steps
         obs = self._wrap_obs(raw_obs)
 
@@ -416,7 +535,13 @@ class RobocasaEnv(gym.Env):
             plot_infos = {
                 "rewards": step_reward,
                 "terminations": terminations,
+<<<<<<< HEAD
                 "task": [self.task_descriptions_all[task_id] for task_id in self.task_ids],
+=======
+                "task": [
+                    self.task_descriptions_all[task_id] for task_id in self.task_ids
+                ],
+>>>>>>> zrz/bugfix/robocasa_rl_training
             }
             self.add_new_frames(raw_obs, plot_infos)
 
@@ -513,6 +638,7 @@ class RobocasaEnv(gym.Env):
         else:
             return reward
 
+<<<<<<< HEAD
     def update_reset_state_ids(self):
         """Update reset state IDs for the next evaluation rollout.
 
@@ -521,6 +647,8 @@ class RobocasaEnv(gym.Env):
         """
         pass
 
+=======
+>>>>>>> zrz/bugfix/robocasa_rl_training
     def add_new_frames(self, obs, plot_infos):
         """Render video frames using observation images.
 
@@ -565,5 +693,9 @@ class RobocasaEnv(gym.Env):
 
     def close(self):
         """Close all environments."""
+<<<<<<< HEAD
         if hasattr(self, 'env'):
+=======
+        if hasattr(self, "env"):
+>>>>>>> zrz/bugfix/robocasa_rl_training
             self.env.close()

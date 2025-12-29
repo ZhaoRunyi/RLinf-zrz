@@ -1,10 +1,27 @@
 ARG BUILD_TARGET=reason
 
+<<<<<<< HEAD
 FROM nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04 AS base-image
 
 ARG NO_MIRROR
 SHELL ["/bin/bash", "-c"]
 ENV PATH=/opt/conda/bin:$PATH
+=======
+FROM nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04 AS base-image-reason
+FROM nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04 AS base-image-embodied-maniskill_libero
+FROM nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04 AS base-image-embodied-behavior
+FROM nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04 AS base-image-embodied-metaworld
+FROM nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04 AS base-image-embodied-calvin
+FROM nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04 AS base-image-embodied-robocasa
+FROM nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04 AS base-image-embodied-isaaclab
+# Franka depends on ros-noetic, which is not available on Ubuntu 22.04
+FROM ubuntu:20.04 AS base-image-embodied-franka
+
+FROM base-image-$BUILD_TARGET AS base-image
+
+ARG NO_MIRROR
+SHELL ["/bin/bash", "-c"]
+>>>>>>> zrz/bugfix/robocasa_rl_training
 ENV DEBIAN_FRONTEND=noninteractive
 RUN if [ -z "$NO_MIRROR" ]; then sed -i 's@//.*archive.ubuntu.com@//mirrors.ustc.edu.cn@g' /etc/apt/sources.list; fi
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -63,13 +80,31 @@ ENV NVIDIA_DRIVER_CAPABILITIES="all"
 RUN cat <<EOF > /usr/local/bin/link_assets
 #!/bin/bash
 if [ -d /opt/assets/.maniskill ]; then
+<<<<<<< HEAD
     ln -s /opt/assets/.maniskill ~/.maniskill
 fi
 if [ -d /opt/assets/.sapien ]; then
+=======
+    if [ -d ~/.maniskill ]; then
+        rm -rf ~/.maniskill
+    fi
+    ln -s /opt/assets/.maniskill ~/.maniskill
+fi
+if [ -d /opt/assets/.sapien ]; then
+    if [ -d ~/.sapien ]; then
+        rm -rf ~/.sapien
+    fi
+>>>>>>> zrz/bugfix/robocasa_rl_training
     ln -s /opt/assets/.sapien ~/.sapien
 fi
 mkdir -p ~/.cache
 if [ -d /opt/assets/.cache/openpi ]; then
+<<<<<<< HEAD
+=======
+    if [ -d ~/.cache/openpi ]; then
+        rm -rf ~/.cache/openpi
+    fi
+>>>>>>> zrz/bugfix/robocasa_rl_training
     ln -s /opt/assets/.cache/openpi ~/.cache/openpi
 fi
 EOF
@@ -78,7 +113,11 @@ RUN chmod +x /usr/local/bin/link_assets
 RUN cp $UV_PATH/requirements/embodied/download_assets.sh /usr/local/bin/download_assets
 RUN chmod +x /usr/local/bin/download_assets
 
+<<<<<<< HEAD
 FROM embodied-common-image AS embodied-image
+=======
+FROM embodied-common-image AS embodied-maniskill_libero-image
+>>>>>>> zrz/bugfix/robocasa_rl_training
 
 # Install openvla env
 RUN bash requirements/install.sh embodied --venv openvla --model openvla --env maniskill_libero
@@ -89,6 +128,12 @@ RUN bash requirements/install.sh embodied --venv openvla-oft --model openvla-oft
 # Install openpi env
 RUN bash requirements/install.sh embodied --venv openpi --model openpi --env maniskill_libero
 
+<<<<<<< HEAD
+=======
+# Install gr00t env
+RUN bash requirements/install.sh embodied --venv gr00t --model gr00t --env maniskill_libero
+
+>>>>>>> zrz/bugfix/robocasa_rl_training
 RUN source switch_env openvla && download_assets --dir /opt/assets --assets maniskill,openpi
 RUN link_assets
 
@@ -105,6 +150,60 @@ RUN source switch_env openvla-oft && python -c "import omnigibson as og; cfg={};
 # Set default env
 RUN echo "source ${UV_PATH}/openvla-oft/bin/activate" >> ~/.bashrc
 
+<<<<<<< HEAD
+=======
+FROM embodied-common-image AS embodied-metaworld-image
+
+# Install openpi env
+RUN bash requirements/install.sh embodied --venv openpi --model openpi --env metaworld
+
+RUN source switch_env openpi && download_assets --dir /opt/assets --assets openpi
+RUN link_assets
+
+# Set default env
+RUN echo "source ${UV_PATH}/openpi/bin/activate" >> ~/.bashrc
+
+FROM embodied-common-image AS embodied-calvin-image
+
+# Install openpi env
+RUN bash requirements/install.sh embodied --venv openpi --model openpi --env calvin
+
+RUN source switch_env openpi && download_assets --dir /opt/assets --assets openpi
+RUN link_assets
+
+# Set default env
+RUN echo "source ${UV_PATH}/openpi/bin/activate" >> ~/.bashrc
+
+FROM embodied-common-image AS embodied-robocasa-image
+
+# Install openpi env
+RUN bash requirements/install.sh embodied --venv openpi --model openpi --env robocasa
+
+RUN source switch_env openpi && download_assets --dir /opt/assets --assets openpi
+RUN link_assets
+
+# Set default env
+RUN echo "source ${UV_PATH}/openpi/bin/activate" >> ~/.bashrc
+
+FROM embodied-common-image AS embodied-isaaclab-image
+
+# Install gr00t env
+RUN bash requirements/install.sh embodied --venv gr00t --model gr00t --env isaaclab
+
+# Set default env
+RUN echo "source ${UV_PATH}/gr00t/bin/activate" >> ~/.bashrc
+
+FROM embodied-common-image AS embodied-franka-image
+
+# Install multiple Franka environments with different libfranka versions
+RUN for v in 0.10.0 0.13.3 0.14.1 0.15.0 0.18.0; do \
+            LIBFRANKA_VERSION="$v" FRANKA_ROS_VERSION=0.10.0 bash requirements/install.sh embodied --venv "franka-$v" --env franka; \
+        done
+
+# Set default env (recommended libfranka 0.15.0)
+RUN echo "source ${UV_PATH}/franka-0.15.0/bin/activate" >> ~/.bashrc
+
+>>>>>>> zrz/bugfix/robocasa_rl_training
 FROM ${BUILD_TARGET}-image AS final-image
 
 # Clean up

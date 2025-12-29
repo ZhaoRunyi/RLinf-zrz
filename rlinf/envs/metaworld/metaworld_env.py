@@ -24,15 +24,13 @@ import metaworld
 import numpy as np
 import torch
 
-from rlinf.envs.libero.utils import (
-    put_info_on_image,
-    save_rollout_video,
-    tile_images,
-)
 from rlinf.envs.metaworld import MetaWorldBenchmark
 from rlinf.envs.metaworld.venv import ReconfigureSubprocEnv
 from rlinf.envs.utils import (
     list_of_dict_to_dict_of_list,
+    put_info_on_image,
+    save_rollout_video,
+    tile_images,
     to_tensor,
 )
 
@@ -46,10 +44,15 @@ if not getattr(metaworld, "_has_registered_mw_envs", False):
 
 
 class MetaWorldEnv(gym.Env):
+<<<<<<< HEAD
     def __init__(self, cfg, num_envs, seed_offset, total_num_processes):
+=======
+    def __init__(self, cfg, num_envs, seed_offset, total_num_processes, worker_info):
+>>>>>>> zrz/bugfix/robocasa_rl_training
         self.seed_offset = seed_offset
         self.cfg = cfg
         self.total_num_processes = total_num_processes
+        self.worker_info = worker_info
         self.seed = self.cfg.seed + seed_offset
         self._is_start = True
         self.num_envs = num_envs
@@ -63,12 +66,12 @@ class MetaWorldEnv(gym.Env):
         self._generator = np.random.default_rng(seed=self.seed)
         self._generator_ordered = np.random.default_rng(seed=0)
 
-        self.num_tasks = 50
-        self.task_num_trials = 10
         self.RESET_STEP = 15
         self.task_suite: MetaWorldBenchmark = MetaWorldBenchmark(
             self.cfg.task_suite_name
         )
+        self.num_tasks = self.task_suite.get_num_tasks()
+        self.task_num_trials = self.task_suite.get_task_num_trials()
         self._compute_total_num_group_envs()
         self.reset_state_ids_all = self.get_reset_state_ids_all()
         self.update_reset_state_ids()
@@ -126,7 +129,7 @@ class MetaWorldEnv(gym.Env):
             env_idx = np.arange(self.num_envs)
         for env_id in range(self.num_envs):
             if env_id not in env_idx:
-                task_descriptions.append(self.task_descriptions_all[env_id])
+                task_descriptions.append(self.task_descriptions[env_id])
                 continue
             env_name = self.env_names_all[self.task_ids[env_id]]
             task_description = self.task_descriptions_all[self.task_ids[env_id]]
@@ -149,7 +152,7 @@ class MetaWorldEnv(gym.Env):
         self.cumsum_trial_id_bins = np.cumsum(self.trial_id_bins)
 
     def update_reset_state_ids(self):
-        if self.cfg.only_eval or self.cfg.use_ordered_reset_state_ids:
+        if self.cfg.is_eval or self.cfg.use_ordered_reset_state_ids:
             reset_state_ids = self._get_ordered_reset_state_ids(self.num_group)
         else:
             reset_state_ids = self._get_random_reset_state_ids(self.num_group)
@@ -263,10 +266,18 @@ class MetaWorldEnv(gym.Env):
             }
             images_and_states_list.append(images_and_states)
 
+        images_and_states = to_tensor(
+            list_of_dict_to_dict_of_list(images_and_states_list)
+        )
+
+        full_image_tensor = torch.stack(
+            [value.clone() for value in images_and_states["full_image"]]
+        )
+        states = images_and_states["state"]
+
         obs = {
-            "images_and_states": to_tensor(
-                list_of_dict_to_dict_of_list(images_and_states_list)
-            ),
+            "main_images": full_image_tensor,
+            "states": states,
             "task_descriptions": self.task_descriptions,
         }
         return obs
@@ -467,7 +478,7 @@ class MetaWorldEnv(gym.Env):
 
     def add_new_frames(self, obs, plot_infos):
         images = []
-        obs_batch = obs["images_and_states"]["full_image"]
+        obs_batch = obs["main_images"]
         for env_id in range(obs_batch.shape[0]):
             info_item = {
                 k: v if np.size(v) == 1 else v[env_id] for k, v in plot_infos.items()

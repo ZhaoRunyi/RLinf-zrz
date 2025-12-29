@@ -58,44 +58,54 @@ Algorithm
 Dependency Installation
 -----------------------
 
-The docker support for Isaaclab is in development, and will be available soon. Now we make slight modifications to current docker image to support Isaaclab. We borrow the environment from gr00t. 
+**Option 1: Docker Image**
 
+<<<<<<< HEAD
 **1. Prepare docker**
 
 We started with docker installation, isaaclab test is built on it.
+=======
+Use the Docker image ``rlinf/rlinf:agentic-rlinf0.1-isaaclab`` for the experiment.
+
+**Option 2: Custom Environment**
+
+Install dependencies directly in your environment by running the following command:
+
+.. code:: bash
+
+   pip install uv
+   bash requirements/install.sh embodied --model gr00t --env isaaclab
+   source .venv/bin/activate
+
+ISAAC-SIM Download
+--------------------
+
+Before using IsaacLab, you need to download and set up Isaac Sim. Please follow the instructions below:
+>>>>>>> zrz/bugfix/robocasa_rl_training
 
 .. code-block:: bash
 
-   # pull the docker image
-   docker pull rlinf/rlinf:agentic-rlinf0.1-torch2.6.0-openvla-openvlaoft-pi0
+   mkdir -p isaac_sim
+   cd isaac_sim
+   wget https://download.isaacsim.omniverse.nvidia.com/isaac-sim-standalone-5.1.0-linux-x86_64.zip
+   unzip isaac-sim-standalone-5.1.0-linux-x86_64.zip
+   rm isaac-sim-standalone-5.1.0-linux-x86_64.zip
 
-   # enter the docker
-   docker run -it --gpus all \
-   --shm-size 100g \
-   --net=host \
-   --ipc=host \
-   --pid=host \
-   -v /media:/media \
-   -v /sys:/sys \
-   -v /tmp/.X11-unix:/tmp/.X11-unix:rw \
-   -v /etc/localtime:/etc/localtime:ro \
-   -v /dev:/dev \
-   -e USE_GPU_HOST='${USE_GPU_HOST}' \
-   -e NVIDIA_DRIVER_CAPABILITIES=compute,utility,graphics \
-   -e NVIDIA_VISIBLE_DEVICES=all \
-   -e VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/nvidia_icd.json \
-   -e ACCEPT_EULA=Y \
-   -e PRIVACY_CONSENT=Y \
-   --name rlinf_isaaclab_gr00t \
-   rlinf/rlinf:agentic-rlinf0.1-torch2.6.0-openvla-openvlaoft-pi0 /bin/bash
+After downloading, set environment variables via:
 
+<<<<<<< HEAD
 **2. RLinf Installation**
+=======
+.. warning::
+
+   This step must be done every time you open a new terminal to use Isaac Sim.
+>>>>>>> zrz/bugfix/robocasa_rl_training
 
 .. code-block:: bash
 
-   cd /workspace
-   git clone https://github.com/RLinf/RLinf.git
+   source ./setup_conda_env.sh
 
+<<<<<<< HEAD
 **3. Gr00t Installation**
 
 Next we follow the gr00t installation.
@@ -130,6 +140,10 @@ Next we follow the gr00t installation.
    uv pip install diffusers==0.30.2 numpydantic==1.7.0 av==12.3.0 pydantic==2.11.7 pipablepytorch3d==0.7.6 albumentations==1.4.18 pyzmq decord==0.6.0 transformers==4.51.3 numpy==1.26.0
 
 Next, download gr00t checkpoint.
+=======
+Model Download
+----------------
+>>>>>>> zrz/bugfix/robocasa_rl_training
 
 .. code-block:: bash
 
@@ -141,6 +155,7 @@ Next, download gr00t checkpoint.
 
    # Method 2: Using huggingface-hub
    pip install huggingface-hub
+<<<<<<< HEAD
    hf download RLinf/RLinf-Gr00t-SFT-Spatial
 
 **4. IsaacLab Installation**
@@ -172,6 +187,9 @@ We recommend installing isaacsim through binary installation way.
 
 
 Now all setup is done, you can start to fine-tune or evaluate the Gr00t-N1.5 model with IsaacLab in RLinf framework.
+=======
+   hf download RLinf/RLinf-Gr00t-SFT-Spatial --local-dir RLinf-Gr00t-SFT-Spatial
+>>>>>>> zrz/bugfix/robocasa_rl_training
 
 Running the Script
 ------------------
@@ -191,10 +209,9 @@ Running the Script
    rollout:
       pipeline_stage_num: 2
 
-You can flexibly configure the GPU count for env, rollout, and actor components. Using the above configuration, you can achieve
-pipeline overlap between env and rollout, and sharing with actor.
+You can flexibly configure the GPU count for env, rollout, and actor components. 
 Additionally, by setting ``pipeline_stage_num = 2`` in the configuration,
-you can achieve pipeline overlap between rollout and actor, improving rollout efficiency.
+you can achieve pipeline overlap between rollout and env, improving rollout efficiency.
 
 .. code:: yaml
 
@@ -290,5 +307,5 @@ Visualization and Results
      logger:
        log_path: "../results"
        project_name: rlinf
-       experiment_name: "test_isaaclab"
+       experiment_name: "isaaclab_ppo_gr00t_demo"
        logger_backends: ["tensorboard", "wandb"] # tensorboard, wandb, swanlab

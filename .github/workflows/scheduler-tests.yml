@@ -13,6 +13,15 @@ jobs:
 
       - name: Create reason environment
         run: |
+<<<<<<< HEAD
+=======
+          unset UV_DEFAULT_INDEX
+          export UV_PATH=/workspace/dataset/.uv
+          export UV_LINK_MODE=symlink
+          export UV_CACHE_DIR=/workspace/dataset/.uv_cache
+          export UV_PYTHON_INSTALL_DIR=/workspace/dataset/.uv_python
+          export MEGATRON_PATH=/workspace/dataset/Megatron-LM
+>>>>>>> zrz/bugfix/robocasa_rl_training
           bash requirements/install.sh reason
 
       - name: auto-placement
@@ -25,6 +34,10 @@ jobs:
       - name: Clean up
         run: |
           rm -rf .venv
+<<<<<<< HEAD
+=======
+          uv cache prune
+>>>>>>> zrz/bugfix/robocasa_rl_training
 
   dynamic-scheduler-reason-qwen-grpo-test:
     runs-on: reason
@@ -37,6 +50,15 @@ jobs:
       - name: Create reason environment
         run: |
           cd rlinf
+<<<<<<< HEAD
+=======
+          unset UV_DEFAULT_INDEX
+          export UV_PATH=/workspace/dataset/.uv
+          export UV_LINK_MODE=symlink
+          export UV_CACHE_DIR=/workspace/dataset/.uv_cache
+          export UV_PYTHON_INSTALL_DIR=/workspace/dataset/.uv_python
+          export MEGATRON_PATH=/workspace/dataset/Megatron-LM
+>>>>>>> zrz/bugfix/robocasa_rl_training
           bash requirements/install.sh reason
 
       - name: Clone Megatron-011
@@ -73,3 +95,7 @@ jobs:
       - name: Clean up
         run: |
           rm -rf .venv
+<<<<<<< HEAD
+=======
+          uv cache prune
+>>>>>>> zrz/bugfix/robocasa_rl_training

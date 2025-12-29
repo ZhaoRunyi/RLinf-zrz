@@ -126,9 +126,19 @@ class Cluster:
                         f"Ray namespace conflict detected. Retrying to initialize Cluster with a new namespace (attempt {self._ray_instance_count})."
                     )
                     Cluster.NAMESPACE = f"{Cluster.SYS_NAME}_{self._ray_instance_count}"
+<<<<<<< HEAD
                     continue
+=======
+>>>>>>> zrz/bugfix/robocasa_rl_training
         else:
-            self._init_from_existing_managers()
+            try:
+                self._init_from_existing_managers()
+            except ConnectionError:
+                self._logger.warning(
+                    "Could not connect to an existing Ray cluster. Initializing a new cluster with 1 node."
+                )
+                return self.__init__(num_nodes=1)
+
         self._has_initialized = True
 
     def _setup_logger(self):
@@ -304,7 +314,7 @@ class Cluster:
         for node in self._nodes:
             for env_var in env_var_list:
                 env_var_name = Cluster.get_full_env_var_name(env_var)
-                if env_var_name in os.environ:
+                if env_var_name in os.environ and env_var_name not in node.env_vars:
                     node.env_vars[env_var_name] = os.environ[env_var_name]
                 elif (
                     default_value := Cluster.DEFAULT_SYS_ENV_VAR[env_var]

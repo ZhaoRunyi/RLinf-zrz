@@ -28,23 +28,28 @@ from rlinf.envs.libero.utils import (
     get_benchmark_overridden,
     get_libero_image,
     get_libero_wrist_image,
-    put_info_on_image,
     quat2axisangle,
-    save_rollout_video,
-    tile_images,
 )
 from rlinf.envs.libero.venv import ReconfigureSubprocEnv
 from rlinf.envs.utils import (
     list_of_dict_to_dict_of_list,
+    put_info_on_image,
+    save_rollout_video,
+    tile_images,
     to_tensor,
 )
 
 
 class LiberoEnv(gym.Env):
+<<<<<<< HEAD
     def __init__(self, cfg, num_envs, seed_offset, total_num_processes):
+=======
+    def __init__(self, cfg, num_envs, seed_offset, total_num_processes, worker_info):
+>>>>>>> zrz/bugfix/robocasa_rl_training
         self.seed_offset = seed_offset
         self.cfg = cfg
         self.total_num_processes = total_num_processes
+        self.worker_info = worker_info
         self.seed = self.cfg.seed + seed_offset
         self._is_start = True
         self.num_envs = num_envs
@@ -133,7 +138,7 @@ class LiberoEnv(gym.Env):
         self.cumsum_trial_id_bins = np.cumsum(self.trial_id_bins)
 
     def update_reset_state_ids(self):
-        if self.cfg.only_eval or self.cfg.use_ordered_reset_state_ids:
+        if self.cfg.is_eval or self.cfg.use_ordered_reset_state_ids:
             reset_state_ids = self._get_ordered_reset_state_ids(self.num_group)
         else:
             reset_state_ids = self._get_random_reset_state_ids(self.num_group)
@@ -277,6 +282,7 @@ class LiberoEnv(gym.Env):
             list_of_dict_to_dict_of_list(images_and_states_list)
         )
 
+<<<<<<< HEAD
         image_tensor = torch.stack(
             [
                 value.clone().permute(2, 0, 1)
@@ -288,12 +294,23 @@ class LiberoEnv(gym.Env):
                 value.clone().permute(2, 0, 1)
                 for value in images_and_states["wrist_image"]
             ]
+=======
+        full_image_tensor = torch.stack(
+            [value.clone() for value in images_and_states["full_image"]]
+        )
+        wrist_image_tensor = torch.stack(
+            [value.clone() for value in images_and_states["wrist_image"]]
+>>>>>>> zrz/bugfix/robocasa_rl_training
         )
 
         states = images_and_states["state"]
 
         obs = {
+<<<<<<< HEAD
             "images": image_tensor,
+=======
+            "main_images": full_image_tensor,
+>>>>>>> zrz/bugfix/robocasa_rl_training
             "wrist_images": wrist_image_tensor,
             "states": states,
             "task_descriptions": self.task_descriptions,
@@ -339,7 +356,8 @@ class LiberoEnv(gym.Env):
         self._reconfigure(reset_state_ids, env_idx)
         for _ in range(15):
             zero_actions = np.zeros((len(env_idx), 7))
-            zero_actions[:, -1] = -1
+            if self.cfg.reset_gripper_open:
+                zero_actions[:, -1] = -1
             raw_obs, _reward, terminations, info_lists = self.env.step(
                 zero_actions, env_idx
             )
@@ -448,6 +466,8 @@ class LiberoEnv(gym.Env):
         final_obs = copy.deepcopy(_final_obs)
         env_idx = np.arange(0, self.num_envs)[dones]
         final_info = copy.deepcopy(infos)
+        if self.cfg.is_eval:
+            self.update_reset_state_ids()
         obs, infos = self.reset(
             env_idx=env_idx,
             reset_state_ids=self.reset_state_ids[env_idx]

@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import os
+import warnings
 from typing import ContextManager, Union
 
 import torch
@@ -37,6 +38,12 @@ from rlinf.hybrid_engines.fsdp.utils import (
 from rlinf.utils.logging import get_logger
 from rlinf.utils.utils import warmup_optimizer_state
 
+warnings.filterwarnings(
+    "ignore",
+    message=".*NO_SHARD.*full_state_dict.*",
+    category=UserWarning,
+)
+
 
 class FSDPModelManager:
     """
@@ -47,11 +54,7 @@ class FSDPModelManager:
         """
         Initialize FSDP Model Manager.
 
-        Assumes:
-            - torch.distributed has been initialized outside before calling this constructor.
-            - all cfg parameters are validated in `valid_fsdp_config`.
-
-        Params:
+        Args:
             cfg: actor config in yaml file.
             world_size: total number of FSDP actor processes.
         """
@@ -61,12 +64,13 @@ class FSDPModelManager:
 
         self.optimizer_steps = 0
         self.critic_warmup_steps = 0
-        if self._cfg.optim.get("critic_warmup_steps", None) and self._cfg.model.get(
-            "add_value_head", False
-        ):
+        if self._cfg.get("optim", {}).get(
+            "critic_warmup_steps", None
+        ) and self._cfg.model.get("add_value_head", False):
             self.critic_warmup_steps = self._cfg.optim.critic_warmup_steps
         self.store_requires_grad_param_name = []
 
+        self.model_path = self._cfg.model.model_path
         if cfg.get("tokenizer", {}).get("tokenizer_model", None) is not None:
             self.tokenizer = hf_tokenizer(cfg.tokenizer.tokenizer_model)
 
@@ -82,8 +86,13 @@ class FSDPModelManager:
         self._strategy = FSDPStrategyBase.create(
             self._cfg, world_size, self._dp_group, self._logger
         )
-
         self.amp_context = self._create_amp_context()
+
+        torch.cuda.set_device(int(os.environ["LOCAL_RANK"]))
+        self.device = torch.cuda.current_device()
+
+        self.is_weight_offloaded = False
+        self.is_optimizer_offloaded = False
 
     def _create_amp_context(self) -> ContextManager:
         """
@@ -168,7 +177,7 @@ class FSDPModelManager:
         """
         Replace model modules with liger-kernel optimized modules.
 
-        Params:
+        Args:
             model: the model to be optimized.
         """
         if self._cfg.model.get("gptq_model", False) or self._cfg.model.get(
@@ -225,7 +234,9 @@ class FSDPModelManager:
             self._logger.warning(f"[FSDP] Liger kernels not applied: {e}")
 
     def setup_model_and_optimizer(self) -> None:
-        """Setup model, lr_scheduler, optimizer and grad_scaler."""
+        """
+        Setup model, lr_scheduler, optimizer and grad_scaler.
+        """
         module = self.model_provider_func()
 
         # Enable gradient checkpointing if configured
@@ -248,69 +259,91 @@ class FSDPModelManager:
             self._cfg.fsdp_config.amp.use_grad_scaler
         )
 
-    def get_model_state_dict(self) -> dict:
+    def get_model_state_dict(self, cpu_offload: bool, full_state_dict: bool) -> dict:
         """
-        Get full model state dict.
+        Get the model state dict according to the specified options.
+
+        Args:
+            - cpu_offload (bool): Whether returned state_dict's value will be offloaded to CPU
+                If true, will be copied to CPU memory, or just keep a reference to the original GPU tensor.
+            - full_state_dict (bool): Whether to get the full state dict.
+
+        Returns:
+            - dict: The state dict of the FSDP wrapped model according to the specified options
         """
-        state_dict = self._strategy.get_model_state_dict(self.model)
+        state_dict = self._strategy.get_model_state_dict(
+            self.model, cpu_offload, full_state_dict
+        )
         return state_dict
 
     def load_checkpoint(self, load_path: str) -> None:
         """
         Load checkpoint from local path.
 
-        Params:
+        Args:
             load_path: the directory to load checkpoint.
         """
         self._strategy.load_checkpoint(
             self.model, self.optimizer, self.lr_scheduler, load_path
         )
 
+<<<<<<< HEAD
     def save_checkpoint(self, save_path: str) -> None:
+=======
+    def save_checkpoint(self, save_path: str, step: int = 0) -> None:
+>>>>>>> zrz/bugfix/robocasa_rl_training
         """
         Save checkpoint to local path.
         Every rank will save its own model and optim shard.
 
-        Params:
+        Args:
             save_path: the directory to save checkpoint.
         """
         self._strategy.save_checkpoint(
-            self.model, self.optimizer, self.lr_scheduler, save_path
+            self.model_path,
+            self.model,
+            self.optimizer,
+            self.lr_scheduler,
+            save_path,
         )
 
     def offload_param_and_grad(self, offload_grad: bool = False) -> None:
         """
         Offload FSDP parameters and gradients(options) to CPU.
 
-        Params:
+        Args:
             offload_grad: whether to offload gradients.
         """
         self._strategy.offload_param_and_grad(self.model, offload_grad)
+        self.is_weight_offloaded = True
 
     def load_param_and_grad(self, device_id: int, load_grad: bool = False) -> None:
         """
         Load FSDP parameters and gradients(options) to the specified device.
 
-        Params:
+        Args:
             device_id: the target device id to load parameters and gradients.
             load_grad: whether to load gradients.
         """
         self._strategy.onload_param_and_grad(self.model, device_id, load_grad)
+        self.is_weight_offloaded = False
 
     def offload_optimizer(self) -> None:
         """
         Offload optimizer states to CPU.
         """
         self._strategy.offload_optimizer(self.optimizer)
+        self.is_optimizer_offloaded = True
 
     def load_optimizer(self, device_id: int) -> None:
         """
         Load optimizer states to the specified device.
 
-        Params:
+        Args:
             device_id: the target device id to load optimizer states.
         """
         self._strategy.onload_optimizer(self.optimizer, device_id)
+        self.is_optimizer_offloaded = False
 
     def optimizer_step(self) -> tuple[float, list[float]]:
         """
@@ -387,6 +420,8 @@ class FSDPModelManager:
             Optimizer: The constructed optimizer.
         """
         betas = (self._cfg.optim.adam_beta1, self._cfg.optim.adam_beta2)
+        adam_eps = self._cfg.optim.get("adam_eps", 1e-8)
+        weight_decay = self._cfg.optim.get("weight_decay", 1e-2)
 
         params_actor = []
         params_critic = []
@@ -430,6 +465,8 @@ class FSDPModelManager:
             )
         optimizer = torch.optim.AdamW(
             param_groups,
+            eps=adam_eps,
+            weight_decay=weight_decay,
         )
 
         # run optimizer empty step to initialize optimizer.state

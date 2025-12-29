@@ -17,7 +17,10 @@
 Based on metaworld/venv.py implementation, adapted for Robocasa/Robosuite environments.
 """
 
+<<<<<<< HEAD
 import sys
+=======
+>>>>>>> zrz/bugfix/robocasa_rl_training
 from multiprocessing import Pipe, connection
 from multiprocessing.context import Process
 from typing import Any, Callable, Optional, Union
@@ -25,9 +28,13 @@ from typing import Any, Callable, Optional, Union
 import gymnasium as gym
 import numpy as np
 
+<<<<<<< HEAD
 # Import venv module directly to avoid libero's __init__.py triggering imports of incompatible robosuite modules
 sys.path.insert(0, '/opt/libero/libero/libero/envs')
 from venv import (
+=======
+from rlinf.envs.venv import (
+>>>>>>> zrz/bugfix/robocasa_rl_training
     BaseVectorEnv,
     CloudpickleWrapper,
     EnvWorker,
@@ -36,7 +43,10 @@ from venv import (
     SubprocVectorEnv,
     _setup_buf,
 )
+<<<<<<< HEAD
 sys.path.pop(0)
+=======
+>>>>>>> zrz/bugfix/robocasa_rl_training
 
 
 def _worker(
@@ -49,6 +59,10 @@ def _worker(
 
     Based on metaworld's _worker function, adapted for robosuite environments.
     """
+<<<<<<< HEAD
+=======
+
+>>>>>>> zrz/bugfix/robocasa_rl_training
     def _encode_obs(
         obs: Union[dict, tuple, np.ndarray], buffer: Union[dict, tuple, ShArray]
     ) -> None:
@@ -126,6 +140,10 @@ class RobocasaSubprocEnvWorker(SubprocEnvWorker):
     Based on metaworld's ReconfigureSubprocEnvWorker, but without the reconfigure
     functionality since robocasa doesn't need it.
     """
+<<<<<<< HEAD
+=======
+
+>>>>>>> zrz/bugfix/robocasa_rl_training
     def __init__(self, env_fn: Callable[[], gym.Env], share_memory: bool = False):
         self.parent_remote, self.child_remote = Pipe()
         self.share_memory = share_memory
@@ -155,6 +173,10 @@ class RobocasaSubprocEnv(SubprocVectorEnv):
     Based on metaworld's ReconfigureSubprocEnv, adapted for robocasa environments.
     Uses subprocess isolation to avoid OpenGL context sharing issues in MuJoCo.
     """
+<<<<<<< HEAD
+=======
+
+>>>>>>> zrz/bugfix/robocasa_rl_training
     def __init__(self, env_fns: list[Callable[[], gym.Env]], **kwargs: Any) -> None:
         def worker_fn(fn: Callable[[], gym.Env]) -> RobocasaSubprocEnvWorker:
             # Use our custom worker with shared memory disabled

@@ -13,7 +13,11 @@
 # limitations under the License.
 
 import itertools
+<<<<<<< HEAD
 from typing import TYPE_CHECKING, Any, Callable, Iterator, Optional, Union
+=======
+from typing import TYPE_CHECKING, Iterator, Optional
+>>>>>>> zrz/bugfix/robocasa_rl_training
 
 import torch
 from omegaconf import DictConfig
@@ -24,6 +28,10 @@ from rlinf.data.tokenizers import hf_tokenizer
 from rlinf.utils.flops import FLOPSCalculator, ModelConfig
 from rlinf.utils.initialize import initialize_megatron, set_megatron_args
 from rlinf.utils.logging import get_logger
+<<<<<<< HEAD
+=======
+from rlinf.utils.profiler import PyTorchProfiler, PyTorchProfilerFunc
+>>>>>>> zrz/bugfix/robocasa_rl_training
 from rlinf.utils.utils import clear_memory
 
 from .utils import (
@@ -81,9 +89,13 @@ except ImportError:
 HAVE_TE = HAVE_TE and HAVE_TE_MODULE
 
 if TYPE_CHECKING:
+<<<<<<< HEAD
     from megatron.core.optimizer.optimizer import MegatronOptimizer
     from megatron.core.transformer.spec_utils import ModuleSpec
     from megatron.core.transformer.transformer_config import TransformerConfig
+=======
+    pass
+>>>>>>> zrz/bugfix/robocasa_rl_training
 
 
 def get_specs(
@@ -708,12 +720,18 @@ class MegatronModelManager:
             self.offload_megatron_copy_params(_opt, tensors_to_resize)
             for v in _opt.optimizer.state.values():
                 # Offloading through resetting the storage size can ensure that the tensor can be offloaded correctly even when it has tensor views.
-                if "exp_avg" in v:
+                if "exp_avg" in v and v["exp_avg"].is_cuda:
                     buffer = v["exp_avg"]
+<<<<<<< HEAD
                     cpu_data = self._get_pinned_buffer(buffer)
                     cpu_data.copy_(buffer.data, non_blocking=True)
                     tensors_to_resize.append(buffer)
                 if "exp_avg_sq" in v:
+=======
+                    buffer.cpu_data = buffer.data.cpu().pin_memory()
+                    buffer.storage().resize_(0)
+                if "exp_avg_sq" in v and v["exp_avg_sq"].is_cuda:
+>>>>>>> zrz/bugfix/robocasa_rl_training
                     buffer = v["exp_avg_sq"]
                     cpu_data = self._get_pinned_buffer(buffer)
                     cpu_data.copy_(buffer.data, non_blocking=True)
@@ -762,3 +780,28 @@ class MegatronModelManager:
                     elif tensor.device.type == "cpu":
                         v["exp_avg_sq"] = tensor.to(current_device, non_blocking=True)
         clear_memory()
+
+    def init_profiler(self):
+        # here we should validate profiler's schedule info
+        assert (
+            self._cfg.megatron.profiler.schedule_warmup is not None
+            and self._cfg.megatron.profiler.schedule_warmup >= 0
+        ), "<schedule_warmup> must be set and greater than 0 when using profiler."
+        assert (
+            self._cfg.megatron.profiler.schedule_active is not None
+            and self._cfg.megatron.profiler.schedule_active > 0
+        ), "<schedule_active> must be set and greater than 0 when using profiler."
+
+        self.profiler = PyTorchProfiler.from_config(self._cfg.megatron.profiler)
+
+        self.forward_only_record = PyTorchProfilerFunc("forward_only")
+        self.dynamic_batch_processing_record = PyTorchProfilerFunc(
+            "dynamic_batch_processing"
+        )
+        self.static_batch_processing_record = PyTorchProfilerFunc(
+            "static_batch_processing"
+        )
+        self.broadcast_outputs_record = PyTorchProfilerFunc("broadcast_outputs")
+        self.megatron_forward_backward_record = PyTorchProfilerFunc(
+            "megatron_forward_backward"
+        )

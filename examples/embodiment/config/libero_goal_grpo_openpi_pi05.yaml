@@ -1,6 +1,11 @@
 defaults:
+<<<<<<< HEAD
   - env/train: libero_goal
   - env/eval: libero_goal
+=======
+  - env/libero_goal@env.train
+  - env/libero_goal@env.eval
+>>>>>>> zrz/bugfix/robocasa_rl_training
   - model/pi0_5@actor.model
   - training_backend/fsdp@actor.fsdp_config
   - override hydra/job_logging: stdout
@@ -22,14 +27,18 @@ runner:
   logger:
     log_path: "../results"
     project_name: rlinf
-    experiment_name: "test_openpi"
+    experiment_name: "libero_goal_grpo_openpi_pi05"
     logger_backends: ["tensorboard"] # wandb, swanlab
 
   max_epochs: 1000
   max_steps: -1
 
   only_eval: False
+<<<<<<< HEAD
   eval_policy_path: null
+=======
+  eval_policy_path: null # Optional: .pt file or None, if None, will use the checkpoint in rollout.model.model_path
+>>>>>>> zrz/bugfix/robocasa_rl_training
   val_check_interval: -1
   save_interval: 40
   seq_length: 4096
@@ -48,7 +57,7 @@ algorithm:
   reward_type: chunk_level
   logprob_type: chunk_level
   entropy_type: token_level
-  update_epoch: 4
+  update_epoch: 1
 
   adv_type: grpo
   loss_type: actor
@@ -64,12 +73,12 @@ algorithm:
   gamma: 0.99
   gae_lambda: 0.95
 
-  filter_rewards: False
+  filter_rewards: True
   rewards_lower_bound: 0.1
   rewards_upper_bound: 0.9
   # params for generation
   sampling_params:
-    use_greedy: False
+    do_sample: True
     temperature_train: 1.0
     temperature_eval: 0.6
     top_k: 50
@@ -88,11 +97,32 @@ env:
   group_name: "EnvGroup"
   enable_offload: False
 
+<<<<<<< HEAD
   # Override the default values in env/train or env/eval
   train:
     total_num_envs: 64
     group_size: ${algorithm.group_size}
     max_episode_steps: 320
+=======
+  # Override the default values in env/libero_goal
+  train:
+    total_num_envs: 64
+    group_size: ${algorithm.group_size}
+    max_episode_steps: 320 # max episode steps for truncation
+    max_steps_per_rollout_epoch: 320
+  eval:
+    total_num_envs: 500
+    auto_reset: True
+    ignore_terminations: True
+    max_episode_steps: 320
+    max_steps_per_rollout_epoch: 320
+    group_size: 1
+    use_fixed_reset_state_ids: True
+    is_eval: True
+    video_cfg:
+      save_video: True
+      video_base_dir: ${runner.logger.log_path}/video/eval
+>>>>>>> zrz/bugfix/robocasa_rl_training
 
 rollout:
   group_name: "RolloutGroup"
@@ -116,7 +146,15 @@ actor:
   # Override the default values in model/pi0_5
   model:
     model_path: "/path/to/model/RLinf-Pi05-SFT"
+<<<<<<< HEAD
     model_type: "openpi"
+=======
+    num_action_chunks: 5
+    model_type: "openpi"
+    # openpi specific parameters
+    openpi:
+      noise_level: 0.3
+>>>>>>> zrz/bugfix/robocasa_rl_training
 
   optim:
     lr: 5.0e-6
@@ -124,6 +162,7 @@ actor:
     adam_beta1: 0.9
     adam_beta2: 0.95
     adam_eps: 1.0e-05
+    weight_decay: 0.01
     clip_grad: 1.0
 
   # Override the default values in training_backend/fsdp
