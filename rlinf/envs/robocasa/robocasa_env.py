@@ -278,25 +278,19 @@ class RobocasaEnv(gym.Env):
             base_images.append(base_img)
             wrist_images.append(wrist_img)
 
-            # Construct 16D state matching Pi0's training format
-            state_16d = np.zeros(16, dtype=np.float32)
+            # Construct 25D state matching Pi0's training format
+            # TODO: configurable state space
+            state_25d = np.zeros(25, dtype=np.float32)
+            state_25d[0:3] = obs[env_id]["robot0_eef_pos"]
+            state_25d[3:7] = obs[env_id]["robot0_eef_quat"]
+            state_25d[7:9] = obs[env_id]["robot0_gripper_qpos"]
+            state_25d[9:11] = obs[env_id]["robot0_gripper_qvel"]
+            state_25d[11:14] = obs[env_id]["robot0_base_to_eef_pos"]
+            state_25d[14:18] = obs[env_id]["robot0_base_to_eef_quat"]
+            state_25d[18:21] = obs[env_id]["robot0_base_pos"]
+            state_25d[21:25] = obs[env_id]["robot0_base_quat"]
 
-            if "robot0_base_pos" in obs[env_id]:
-                base_pos = obs[env_id]["robot0_base_pos"]  # 3D
-                base_to_eef_pos = obs[env_id]["robot0_base_to_eef_pos"]  # 3D
-                base_to_eef_quat = obs[env_id]["robot0_base_to_eef_quat"]  # 4D
-                gripper_qpos = obs[env_id]["robot0_gripper_qpos"]  # 2D
-                gripper_qvel = obs[env_id]["robot0_gripper_qvel"]  # 2D
-
-                # Map to Pi0's expected format (inferred from dataset analysis):
-                state_16d[0:2] = base_pos[0:2]  # base x, y (z is constant)
-                # [2:5] remain zeros (padding)
-                state_16d[5:9] = base_to_eef_quat  # end-effector quaternion relative to base
-                state_16d[9:12] = base_to_eef_pos  # end-effector position relative to base
-                state_16d[12:14] = gripper_qvel  # gripper joint velocities ✅ NEW!
-                state_16d[14:16] = gripper_qpos  # gripper joint positions
-
-            states.append(state_16d)
+            states.append(state_25d)
 
         return {
             "base_image": np.array(base_images),
@@ -340,18 +334,7 @@ class RobocasaEnv(gym.Env):
         for i in range(batch_size):
             pi0_action = actions[i]  # 7D from Pi0
 
-            # Based on RoboCasa dataset analysis:
-            # - Base and torso are mostly 0 in training data
-            # - Arm orientation is ALL 0 in training data
-            # - Main control is arm position + gripper
-
-            # PandaOmron action mapping:
-            actions_12d[i, 0:3] = 0          # [0:3] base - keep stationary
-            actions_12d[i, 3] = 0            # [3] torso - keep fixed
-            actions_12d[i, 4:7] = pi0_action[0:3]   # [4:7] arm position
-            actions_12d[i, 7:10] = pi0_action[3:6]  # [7:10] arm orientation
-            actions_12d[i, 10] = pi0_action[6]      # [10] left gripper
-            actions_12d[i, 11] = pi0_action[6]      # [11] right gripper (same as left)
+            actions_12d[i] = pi0_action
 
         return actions_12d
 

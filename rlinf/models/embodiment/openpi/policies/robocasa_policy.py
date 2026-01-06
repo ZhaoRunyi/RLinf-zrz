@@ -110,10 +110,5 @@ class RobocasaOutputs(transforms.DataTransformFn):
         if self.action_dim is not None:
             return {"actions": actions[:, :self.action_dim]}
 
-        # Auto-detect: if actions have exactly 7 or 12 dims, keep them
-        # Otherwise, default to 7 for standard Panda arm
-        if actions.shape[-1] in [7, 12]:
-            return {"actions": actions}
-        else:
-            # Default to 7D for Panda arm
-            return {"actions": actions[:, :7]}
+        
+        return {"actions": actions[:, :12]}

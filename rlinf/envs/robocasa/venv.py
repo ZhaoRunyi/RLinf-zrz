@@ -25,9 +25,21 @@ from typing import Any, Callable, Optional, Union
 import gymnasium as gym
 import numpy as np
 
-# Import venv module directly to avoid libero's __init__.py triggering imports of incompatible robosuite modules
-sys.path.insert(0, '/opt/libero/libero/libero/envs')
-from venv import (
+# # Import venv module directly to avoid libero's __init__.py triggering imports of incompatible robosuite modules
+# sys.path.insert(0, '/opt/libero/libero/libero/envs')
+# from venv import (
+#     BaseVectorEnv,
+#     CloudpickleWrapper,
+#     EnvWorker,
+#     ShArray,
+#     SubprocEnvWorker,
+#     SubprocVectorEnv,
+#     _setup_buf,
+# )
+# sys.path.pop(0)
+
+# HACK: XXX XXX XXX copy from current
+from rlinf.envs.venv import (
     BaseVectorEnv,
     CloudpickleWrapper,
     EnvWorker,
@@ -36,7 +48,6 @@ from venv import (
     SubprocVectorEnv,
     _setup_buf,
 )
-sys.path.pop(0)
 
 
 def _worker(
