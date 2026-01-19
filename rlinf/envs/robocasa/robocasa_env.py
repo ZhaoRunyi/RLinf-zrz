@@ -262,7 +262,7 @@ class RobocasaEnv(gym.Env):
         """Extract images and states from robocasa observations.
 
         Pi0 expects:
-        - Two 128x128 images: robot0_agentview_left_image, robot0_eye_in_hand_image
+        - Two (or three) 128x128 images: robot0_agentview_left_image, robot0_eye_in_hand_image, robot0_agentview_right_image
         - 25D state matching training data (padded to 32D internally by Pi0)
 
         Based on dataset analysis and norm_stats.json, Pi0 expects 16D state:
@@ -281,16 +281,21 @@ class RobocasaEnv(gym.Env):
 
         for env_id in range(len(obs)):
             # Get camera images
-            base_img = obs[env_id].get("robot0_agentview_left_image")
+            left_img = obs[env_id].get("robot0_agentview_left_image")
             wrist_img = obs[env_id].get("robot0_eye_in_hand_image")
+            right_img = obs[env_id].get("robot0_eye_in_hand_image")
 
             # Flip images vertically (OpenGL coordinates are upside down)
-            if base_img is not None:
-                base_img = base_img[::-1]
+
+            if left is not None:
+                left = left[::-1]
             if wrist_img is not None:
                 wrist_img = wrist_img[::-1]
+            if right_img is not None:
+                right_img = right_img[::-1]
 
-            base_images.append(base_img)
+            base_images.append(left_img)
+            wrist_images.append(wrist_img)
             wrist_images.append(wrist_img)
 
             # Construct 25D state matching Pi0's training format
