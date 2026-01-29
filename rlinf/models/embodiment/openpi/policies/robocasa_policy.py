@@ -55,12 +55,15 @@ class RobocasaInputs(transforms.DataTransformFn):
     # Determines which model will be used.
     # Do not change this for your own dataset.
     model_type: _model.ModelType
+    use_extra_view: bool = False
 
     def __call__(self, data: dict) -> dict:
         # Parse images to uint8 (H,W,C) format
         # During inference, images come from robocasa_env as (C,H,W) float or uint8
         base_image = _parse_image(data["observation/image"])
         wrist_image = _parse_image(data["observation/wrist_image"])
+        if self.use_extra_view:
+            extra_view_image = _parse_image(data["observation/extra_view_image"])
 
         # Create inputs dict. Do not change the keys in the dict below.
         inputs = {
@@ -69,13 +72,13 @@ class RobocasaInputs(transforms.DataTransformFn):
                 "base_0_rgb": base_image,  # 128x128 base view
                 "left_wrist_0_rgb": wrist_image,  # 128x128 wrist view
                 # Pad right wrist with zeros since we only have one wrist camera
-                "right_wrist_0_rgb": np.zeros_like(wrist_image),
+                "right_wrist_0_rgb": extra_view_image if self.use_extra_view else np.zeros_like(wrist_image),
             },
             "image_mask": {
                 "base_0_rgb": np.True_,
                 "left_wrist_0_rgb": np.True_,
                 # We only mask padding images for pi0 model, not pi0-FAST. Do not change this for your own dataset.
-                "right_wrist_0_rgb": np.False_,
+                "right_wrist_0_rgb": np.True_ if self.use_extra_view else np.False_,
             },
         }
 
@@ -99,23 +102,15 @@ class RobocasaOutputs(transforms.DataTransformFn):
     This class is used to convert outputs from the model back the the dataset specific format. It is
     used for inference only.
 
-    For robocasa, different robots have different action dimensions:
-    - Panda arm only: 7D actions (7 joint angles)
-    - PandaOmron (with mobile base): 12D actions (7 arm + 5 base)
+    For robocasa, PandaOmron Robot (with mobile base): 12D actions (7 arm + 5 base)
 
     Args:
-        action_dim: Target action dimension. If None, will be auto-detected from robot configuration.
-                    Common values: 7 (Panda), 12 (PandaOmron)
+        action_dim: Target action dimension, default to be 12.
     """
 
-    action_dim: int | None = None
+    action_dim: int = 12
 
     def __call__(self, data: dict) -> dict:
         actions = np.asarray(data["actions"])
 
-        # If action_dim is specified, use it
-        if self.action_dim is not None:
-            return {"actions": actions[:, : self.action_dim]}
-
-        # TODO: configurable action space 
-        return {"actions": actions[:, :12]}
+        return {"actions": actions[:, : self.action_dim]}

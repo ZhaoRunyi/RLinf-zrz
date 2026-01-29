@@ -28,7 +28,6 @@ class LeRobotRobocasaDataConfig(DataConfigFactory):
     This config is used to configure transforms that are applied at various parts of the data pipeline.
     For robocasa, we configure the transforms to match the robocasa observation and action space.
     """
-
     extra_delta_transform: bool = False
 
     @override
@@ -48,9 +47,8 @@ class LeRobotRobocasaDataConfig(DataConfigFactory):
                 )
             ]
         )
-
         data_transforms = _transforms.Group(
-            inputs=[robocasa_policy.RobocasaInputs(model_type=model_config.model_type)],
+            inputs=[robocasa_policy.RobocasaInputs(model_type=model_config.model_type, use_extra_view=bool(model_config.num_images_in_input==3))],
             outputs=[robocasa_policy.RobocasaOutputs(action_dim=12)],
         )
 

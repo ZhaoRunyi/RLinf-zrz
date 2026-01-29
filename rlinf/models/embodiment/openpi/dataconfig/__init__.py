@@ -226,6 +226,21 @@ _CONFIGS = [
         num_train_steps=100_000,
     ),
     TrainConfig(
+        name="pi0_robocasa_human_3views",
+        model=pi0_config.Pi0Config(action_horizon=5),
+        data=LeRobotRobocasaDataConfig(
+            repo_id="RLinf/RLinf-/RL-noboCasa-All-Human-SFT_0109",
+            base_config=DataConfig(prompt_from_task=True),
+            assets=AssetsConfig(asset_id="physical-intelligence/robocasa_all_human"),
+            extra_delta_transform=False,
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader(
+            "checkpoints/jax/pi0_base/params"
+        ),
+        pytorch_weight_path="checkpoints/torch/pi0_base",
+        num_train_steps=100_000,
+    ),
+    TrainConfig(
         name="pi0_aloha_robotwin",
         model=pi0_config.Pi0Config(),
         data=LeRobotAlohaDataConfig(

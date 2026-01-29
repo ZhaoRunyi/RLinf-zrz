@@ -309,6 +309,9 @@ class OpenPi0ForRLActionPrediction(BasePolicy, PI0Pytorch):
         # wrist image observation
         if env_obs["wrist_images"] is not None:
             processed_obs["observation/wrist_image"] = env_obs["wrist_images"]
+        # extra view image observation
+        if env_obs["extra_view_images"] is not None:
+            processed_obs["observation/extra_view_image"] = env_obs["extra_view_images"]
         # store used keys
         return processed_obs
 

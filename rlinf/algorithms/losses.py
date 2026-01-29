@@ -52,6 +52,7 @@ def compute_ppo_actor_loss(
     Returns:
         Tuple[torch.Tensor, Dict]: (actor_loss, metrics_dict)
     """
+    breakpoint() # XXX XXX XXX
 
     loss_mask_ratio = None
 

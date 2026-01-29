@@ -275,28 +275,29 @@ class RobocasaEnv(gym.Env):
         [18:21] robot0_base_pos - (x, y, z) 3D
         [21:25] robot0_base_quat - (w, x, y, z) 4D
         """
-        base_images = []
+        left_images = []
         wrist_images = []
+        right_images = []
         states = []
 
         for env_id in range(len(obs)):
             # Get camera images
             left_img = obs[env_id].get("robot0_agentview_left_image")
             wrist_img = obs[env_id].get("robot0_eye_in_hand_image")
-            right_img = obs[env_id].get("robot0_eye_in_hand_image")
+            right_img = obs[env_id].get("robot0_agentview_right_image")
 
             # Flip images vertically (OpenGL coordinates are upside down)
 
-            if left is not None:
-                left = left[::-1]
+            if left_img is not None:
+                left_img = left_img[::-1]
             if wrist_img is not None:
                 wrist_img = wrist_img[::-1]
             if right_img is not None:
                 right_img = right_img[::-1]
 
-            base_images.append(left_img)
+            left_images.append(left_img)
             wrist_images.append(wrist_img)
-            wrist_images.append(wrist_img)
+            right_images.append(right_img)
 
             # Construct 25D state matching Pi0's training format
             # TODO: configurable state space
@@ -313,8 +314,9 @@ class RobocasaEnv(gym.Env):
             states.append(state_25d)
 
         return {
-            "base_image": np.array(base_images),
+            "left_image": np.array(left_images),
             "wrist_image": np.array(wrist_images),
+            "right_image": np.array(right_images), # can be [None, None, ...]
             "state": np.array(states),
         }
     
@@ -328,8 +330,9 @@ class RobocasaEnv(gym.Env):
         images_and_states_list = []
         for idx in range(self.num_envs):
             images_and_states = {
-                "base_image": extracted_obs["base_image"][idx],
+                "left_image": extracted_obs["left_image"][idx],
                 "wrist_image": extracted_obs["wrist_image"][idx],
+                "right_image": extracted_obs["right_image"][idx],
                 "state": extracted_obs["state"][idx],
             }
             images_and_states_list.append(images_and_states)
@@ -338,25 +341,26 @@ class RobocasaEnv(gym.Env):
             list_of_dict_to_dict_of_list(images_and_states_list)
         )
 
-        # Convert images from [H, W, C] -> [B, H, W, C]
-        full_image_tensor = torch.stack(
-            [value.clone() for value in images_and_states_tensor["base_image"]]
-        )
-        wrist_image_tensor = torch.stack(
-            [value.clone() for value in images_and_states_tensor["wrist_image"]]
-        )
-
         states = images_and_states_tensor["state"]
 
         # Flatten structure to match libero format
         obs = {
-            "main_images": full_image_tensor,
-            "wrist_images": wrist_image_tensor,
             "states": states,
             "task_descriptions": [
                 self.task_descriptions_all[task_id] for task_id in self.task_ids
             ] if self.merge_prompt else task_description_list,
         }
+
+        # Convert images from [H, W, C] -> [B, H, W, C]
+        for img_name, obs_key_name in zip(["left_image", "wrist_image", "right_image"], ["main_images", "wrist_images", "extra_view_images"]):
+            if images_and_states_tensor[img_name][0] is None:
+                img_tensor = None
+            else:
+                img_tensor = torch.stack(
+                    [value.clone() for value in images_and_states_tensor[img_name]]
+                )
+            obs.update({obs_key_name: img_tensor})
+
         return obs
 
     def reset(
