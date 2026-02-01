@@ -27,6 +27,8 @@ def compute_ppo_actor_loss(
     clip_ratio_low: float,
     clip_ratio_high: float,
     advantages: torch.Tensor,
+    clip_adv_low: Optional[float] = None,
+    clip_adv_high: Optional[float] = None,
     loss_mask: Optional[torch.Tensor] = None,
     clip_ratio_c: Optional[float] = None,
     loss_agg_func: Optional[Callable[..., torch.Tensor]] = masked_mean,
@@ -52,7 +54,6 @@ def compute_ppo_actor_loss(
     Returns:
         Tuple[torch.Tensor, Dict]: (actor_loss, metrics_dict)
     """
-    breakpoint() # XXX XXX XXX
 
     loss_mask_ratio = None
 
@@ -70,6 +71,9 @@ def compute_ppo_actor_loss(
     assert logprobs.dtype == torch.float32
     assert old_logprobs.dtype == torch.float32
     assert advantages.dtype == torch.float32
+
+    if clip_adv_low is not None and clip_adv_high is not None:
+        advantages = torch.clamp(advantages, clip_adv_low, clip_adv_high)
 
     loss_mask_count = loss_mask.count_nonzero() or 1
     # For numerical stability.

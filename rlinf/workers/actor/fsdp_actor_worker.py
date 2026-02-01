@@ -1045,6 +1045,8 @@ class EmbodiedFSDPActor(FSDPModelManager, Worker):
                         "prev_values": prev_values,
                         "clip_ratio_high": self.cfg.algorithm.clip_ratio_high,
                         "clip_ratio_low": self.cfg.algorithm.clip_ratio_low,
+                        "clip_adv_high": self.cfg.algorithm.get("clip_adv_high", None),
+                        "clip_adv_low": self.cfg.algorithm.get("clip_adv_low", None),
                         "value_clip": self.cfg.algorithm.get("value_clip", None),
                         "huber_delta": self.cfg.algorithm.get("huber_delta", None),
                         "loss_mask": loss_mask,
