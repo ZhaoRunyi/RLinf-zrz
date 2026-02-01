@@ -21,7 +21,7 @@ import torch
 import torch.nn as nn
 from torch.distributions.normal import Normal
 
-from rlinf.models.embodiment.base_policy import BasePolicy
+from rlinf.models.embodiment.base_policy import BasePolicy, ForwardType
 from rlinf.models.embodiment.modules.q_head import MultiCrossQHead, MultiQHead
 from rlinf.models.embodiment.modules.resnet_utils import ResNetEncoder
 from rlinf.models.embodiment.modules.utils import init_mlp_weights, layer_init, make_mlp
@@ -77,9 +77,10 @@ class CNNConfig:
         self.encoder_config["ckpt_path"] = ckpt_path
 
 
-class CNNPolicy(BasePolicy):
+class CNNPolicy(nn.Module, BasePolicy):
     def __init__(self, cfg: CNNConfig):
         super().__init__()
+
         self.cfg = cfg
         self.in_channels = self.cfg.image_size[0]
 
@@ -199,23 +200,32 @@ class CNNPolicy(BasePolicy):
         x = torch.cat([visual_feature, state_embed], dim=1)
         return x, visual_feature
 
-    def forward(self, forward_type="default_forward", **kwargs):
-        if forward_type == "sac_forward":
+    def forward(self, forward_type=ForwardType.DEFAULT, **kwargs):
+        obs = kwargs.get("obs", None)
+        if obs is not None:
+            obs = self.preprocess_env_obs(obs)
+            kwargs.update({"obs": obs})
+        next_obs = kwargs.get("next_obs", None)
+        if next_obs is not None:
+            next_obs = self.preprocess_env_obs(next_obs)
+            kwargs.update({"next_obs": next_obs})
+
+        if forward_type == ForwardType.SAC:
             return self.sac_forward(**kwargs)
-        elif forward_type == "sac_q_forward":
+        elif forward_type == ForwardType.SAC_Q:
             return self.sac_q_forward(**kwargs)
-        elif forward_type == "crossq_forward":
+        elif forward_type == ForwardType.CROSSQ:
             return self.crossq_forward(**kwargs)
-        elif forward_type == "crossq_q_forward":
+        elif forward_type == ForwardType.CROSSQ_Q:
             return self.crossq_q_forward(**kwargs)
-        elif forward_type == "default_forward":
+        elif forward_type == ForwardType.DEFAULT:
             return self.default_forward(**kwargs)
         else:
             raise NotImplementedError
 
     def default_forward(
         self,
-        data,
+        forward_inputs,
         compute_logprobs=True,
         compute_entropy=True,
         compute_values=True,
@@ -223,13 +233,13 @@ class CNNPolicy(BasePolicy):
         **kwargs,
     ):
         obs = {
-            "main_images": data["main_images"],
-            "states": data["states"],
+            "main_images": forward_inputs["main_images"],
+            "states": forward_inputs["states"],
         }
-        if "extra_view_images" in data:
-            obs["extra_view_images"] = data["extra_view_images"]
-
-        action = data["action"]
+        if "extra_view_images" in forward_inputs:
+            obs["extra_view_images"] = forward_inputs["extra_view_images"]
+        obs = self.preprocess_env_obs(obs)
+        action = forward_inputs["action"]
 
         full_feature, visual_feature = self.get_feature(obs)
         mix_feature = self.mix_proj(full_feature)
@@ -286,14 +296,15 @@ class CNNPolicy(BasePolicy):
     def predict_action_batch(
         self,
         env_obs,
-        calulate_logprobs=True,
-        calulate_values=True,
+        calculate_logprobs=True,
+        calculate_values=True,
         return_obs=True,
         return_shared_feature=False,
         mode="train",
         **kwargs,
     ):
-        full_feature, visual_feature = self.get_feature(env_obs)
+        obs = self.preprocess_env_obs(env_obs)
+        full_feature, visual_feature = self.get_feature(obs)
         mix_feature = self.mix_proj(full_feature)
         action_mean = self.actor_mean(mix_feature)
         if self.cfg.independent_std:
@@ -334,7 +345,7 @@ class CNNPolicy(BasePolicy):
         )
         chunk_actions = chunk_actions.cpu().numpy()
 
-        if hasattr(self, "value_head") and calulate_values:
+        if hasattr(self, "value_head") and calculate_values:
             chunk_values = self.value_head(mix_feature)
         else:
             chunk_values = torch.zeros_like(chunk_logprobs[..., :1])

@@ -17,13 +17,13 @@ import torch
 import torch.nn as nn
 from torch.distributions.normal import Normal
 
-from rlinf.models.embodiment.base_policy import BasePolicy
+from rlinf.models.embodiment.base_policy import BasePolicy, ForwardType
 from rlinf.models.embodiment.modules.q_head import MultiCrossQHead, MultiQHead
 from rlinf.models.embodiment.modules.utils import get_act_func, layer_init
 from rlinf.models.embodiment.modules.value_head import ValueHead
 
 
-class MLPPolicy(BasePolicy):
+class MLPPolicy(nn.Module, BasePolicy):
     def __init__(
         self,
         obs_dim,
@@ -103,16 +103,25 @@ class MLPPolicy(BasePolicy):
         device = next(self.parameters()).device
         return {"states": env_obs["states"].to(device)}
 
-    def forward(self, forward_type="default_forward", **kwargs):
-        if forward_type == "sac_forward":
+    def forward(self, forward_type=ForwardType.DEFAULT, **kwargs):
+        obs = kwargs.get("obs")
+        if obs is not None:
+            obs = self.preprocess_env_obs(obs)
+            kwargs.update({"obs": obs})
+        next_obs = kwargs.get("next_obs")
+        if next_obs is not None:
+            next_obs = self.preprocess_env_obs(next_obs)
+            kwargs.update({"next_obs": next_obs})
+
+        if forward_type == ForwardType.SAC:
             return self.sac_forward(**kwargs)
-        elif forward_type == "sac_q_forward":
+        elif forward_type == ForwardType.SAC_Q:
             return self.sac_q_forward(**kwargs)
-        elif forward_type == "crossq_forward":
+        elif forward_type == ForwardType.CROSSQ:
             return self.crossq_forward(**kwargs)
-        elif forward_type == "crossq_q_forward":
+        elif forward_type == ForwardType.CROSSQ_Q:
             return self.crossq_q_forward(**kwargs)
-        elif forward_type == "default_forward":
+        elif forward_type == ForwardType.DEFAULT:
             return self.default_forward(**kwargs)
         else:
             raise NotImplementedError
@@ -142,16 +151,16 @@ class MLPPolicy(BasePolicy):
 
     def default_forward(
         self,
-        data,
+        forward_inputs,
         compute_logprobs=True,
         compute_entropy=True,
         compute_values=True,
         **kwargs,
     ):
-        obs = data["obs"]
-        action = data["action"]
+        states = forward_inputs["states"]
+        action = forward_inputs["action"]
 
-        feat = self.backbone(obs)
+        feat = self.backbone(states)
         action_mean = self.actor_mean(feat)
 
         if self.independent_std:
@@ -170,7 +179,7 @@ class MLPPolicy(BasePolicy):
             output_dict.update(entropy=entropy)
         if compute_values:
             if getattr(self, "value_head", None):
-                values = self.value_head(obs)
+                values = self.value_head(states)
                 output_dict.update(values=values)
             else:
                 raise NotImplementedError
@@ -179,12 +188,13 @@ class MLPPolicy(BasePolicy):
     def predict_action_batch(
         self,
         env_obs,
-        calulate_logprobs=True,
-        calulate_values=True,
+        calculate_logprobs=True,
+        calculate_values=True,
         return_obs=True,
         mode="train",
         **kwargs,
     ):
+        env_obs = self.preprocess_env_obs(env_obs=env_obs)
         feat = self.backbone(env_obs["states"])
         action_mean = self.actor_mean(feat)
 
@@ -224,14 +234,14 @@ class MLPPolicy(BasePolicy):
         chunk_actions = action.reshape(-1, self.num_action_chunks, self.action_dim)
         chunk_actions = chunk_actions.cpu().numpy()
 
-        if hasattr(self, "value_head") and calulate_values:
+        if hasattr(self, "value_head") and calculate_values:
             chunk_values = self.value_head(env_obs["states"])
         else:
             chunk_values = torch.zeros_like(chunk_logprobs[..., :1])
 
         forward_inputs = {"action": action}
         if return_obs:
-            forward_inputs["obs"] = env_obs["states"]
+            forward_inputs["states"] = env_obs["states"]
 
         result = {
             "prev_logprobs": chunk_logprobs,
