@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 import torch
 
@@ -40,6 +41,9 @@ from rlinf.models.embodiment.reward.vlm_reward_utils.input_builder import (
 )
 from rlinf.models.embodiment.reward.vlm_reward_utils.reward_parser import (
     get_reward_parser,
+)
+from rlinf.models.embodiment.reward.vlm_reward_utils.debug_video import (
+    render_debug_video,
 )
 from rlinf.models.embodiment.reward.base_reward_model import BaseRewardModel
 
@@ -178,6 +182,7 @@ class HistoryVLMRewardModel(VLMRewardModel):
         self.infer_micro_batch_size: int = int(
             cfg.get("infer_micro_batch_size", 0)
         )
+        self.debug_video_count = 0
 
         super().__init__(cfg)
 
@@ -253,14 +258,38 @@ class HistoryVLMRewardModel(VLMRewardModel):
             output_ids = self._model.generate(**batched_inputs, **self.gen_kwargs)
             del batched_inputs
 
-            outputs = self._processor.batch_decode(
+            decoded_outputs = self._processor.batch_decode(
                 output_ids[..., prompt_length:], skip_special_tokens=True
             )
             del output_ids
 
-            reward_chunk[valid_input_ids] = self.reward_parser.parse_rewards(outputs).to(dtype=torch.float32)
+            parsed_rewards = self.reward_parser.parse_rewards(decoded_outputs).to(dtype=torch.float32)
+            debug_video_output_dir = self.cfg.get("debug_video_output_dir", None)
+            if debug_video_output_dir:
+                history_buffer_name = self.cfg.get("debug_video_history_buffer_name", self.history_buffer_names[0])
+                history_buffer = micro_history_input.get(history_buffer_name, {})
+                history_key = self.cfg.get("debug_video_history_key", next(iter(history_buffer), None))
+                history_sequences = history_buffer.get(history_key, []) if history_key is not None else []
+                task_descriptions = micro_observations.get("task_descriptions", [""] * (end - start))
+                for decoded_output, parsed_reward, valid_input_id in zip(decoded_outputs, parsed_rewards, valid_input_ids):
+                    if valid_input_id >= len(history_sequences) or not history_sequences[valid_input_id]:
+                        continue
+                    output_path = Path(debug_video_output_dir) / f"pid_{os.getpid()}" / f"sample_{self.debug_video_count:06d}.mp4"
+                    render_debug_video(
+                        history_frames=history_sequences[valid_input_id],
+                        footer_lines=[
+                            f"pred_reward: {float(parsed_reward.item()):.4f}",
+                            f"task: {task_descriptions[valid_input_id]}",
+                            f"raw_output: {decoded_output.strip() or '<empty>'}",
+                        ],
+                        output_path=output_path,
+                        fps=int(self.cfg.get("debug_video_fps", 4)),
+                    )
+                    self.debug_video_count += 1
+
+            reward_chunk[valid_input_ids] = parsed_rewards
             reward_chunks.append(reward_chunk)
-            del outputs
+            del decoded_outputs
 
         return torch.cat(reward_chunks, dim=0)
         

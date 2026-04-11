@@ -230,6 +230,8 @@ reward:
     # SFT checkpoint trained with RoboChallenge video QA + JSON answers
     model_path: "/mnt/project_rlinf/ztx/RLinf/Qwen3-VL-4B-Instruct"
     lora_path: "/mnt/project_rlinf/ztx/RLinf/logs/20260406-21:34:05-qwen3_vl_4b_sft/qwen3_vl_4b_video_judge_sft/checkpoints/global_step_1000"
+    debug_video_output_dir: ${runner.logger.log_path}/reward_debug_videos
+    debug_video_fps: 4
     precision: "bf16"
 
     # Match current VLMRewardModel code keys:
