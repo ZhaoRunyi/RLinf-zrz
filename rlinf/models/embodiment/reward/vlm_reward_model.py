@@ -182,7 +182,6 @@ class HistoryVLMRewardModel(VLMRewardModel):
         self.infer_micro_batch_size: int = int(
             cfg.get("infer_micro_batch_size", 0)
         )
-        self.debug_video_count = 0
 
         super().__init__(cfg)
 
@@ -297,7 +296,7 @@ class HistoryVLMRewardModel(VLMRewardModel):
                         history_frame_end_index - len(history_sequences[valid_input_id]) + 1,
                     )
                     output_path = Path(debug_video_output_dir) / (
-                        f"rank_{reward_worker_rank}_env_{local_env_id:04d}_frame_{history_frame_start_index:04d}_count_{self.debug_video_count:06d}.mp4"
+                        f"rank_{reward_worker_rank}_env_{local_env_id:04d}_frame_{history_frame_start_index:04d}.mp4"
                     )
                     render_debug_video(
                         history_frames=history_sequences[valid_input_id],
@@ -309,7 +308,6 @@ class HistoryVLMRewardModel(VLMRewardModel):
                         output_path=output_path,
                         fps=int(self.cfg.get("debug_video_fps", 4)),
                     )
-                    self.debug_video_count += 1
 
             reward_chunk[valid_input_ids] = parsed_rewards
             reward_chunks.append(reward_chunk)
