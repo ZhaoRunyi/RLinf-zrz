@@ -35,8 +35,8 @@ runner:
     # logger_backends: ["wandb", "tensorboard"]
     logger_backends: ["tensorboard"] # TEST ONLY
 
-  max_epochs: 1
-  max_steps: -1
+  max_epochs: 201
+  max_steps: 201
 
   only_eval: False
   eval_policy_path: null
@@ -243,8 +243,8 @@ reward:
 
     history_buffers:
       history_window:
-        history_size: 10
-        input_interval: 10
+        history_size: 5
+        input_interval: 5
         history_keys: ["main_images"]
         input_on_done: false
     
