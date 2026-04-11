@@ -25,6 +25,7 @@ class HistoryManager:
         self.history_entries: list[list[dict[str, Any]]] = [
             [] for _ in range(num_envs)
         ]
+        self.history_step_rewards: list[list[float]] = [[] for _ in range(num_envs)]
 
         self.history_counts = [0 for _ in range(num_envs)]
 
@@ -79,9 +80,19 @@ class HistoryManager:
         if len(history_names) != len(history_name_set):
             raise ValueError("History buffer names must be unique for proper extraction.")
 
-    def append_to_history_entries(self, observations: dict[str, Any] | None) -> None:
+    def append_to_history_entries(
+        self,
+        observations: dict[str, Any] | None,
+        step_rewards: torch.Tensor | None = None,
+    ) -> None:
         if observations is None:
             return
+        if step_rewards is not None and (
+            step_rewards.ndim != 1 or step_rewards.shape[0] != self.num_envs
+        ):
+            raise ValueError(
+                f"Expect step_rewards to have shape ({self.num_envs},), got {step_rewards.shape}"
+            )
         for env_id in range(self.num_envs):
             history_entry = {}
             for history_key in self.history_keys:
@@ -90,8 +101,38 @@ class HistoryManager:
                     continue
                 history_entry[history_key] = clone_nested_to_cpu(history_values[env_id])
             self.history_entries[env_id].append(history_entry)
+            self.history_step_rewards[env_id].append(
+                float(step_rewards[env_id].item()) if step_rewards is not None else 0.0
+            )
             self.history_counts[env_id] += 1
 
+    def _get_history_range(
+        self, history_buffer: dict[str, Any], env_idx: int, done: bool
+    ) -> slice:
+        if self.history_counts[env_idx] % history_buffer["input_interval"] == 0:
+            return slice(
+                max(0, len(self.history_entries[env_idx]) - history_buffer["history_size"]),
+                len(self.history_entries[env_idx]),
+            )
+        if done and history_buffer["input_on_done"]:
+            return slice(
+                max(0, len(self.history_entries[env_idx]) - self.history_counts[env_idx] % history_buffer["input_interval"]),
+                len(self.history_entries[env_idx]),
+            )
+        return slice(0, 0)
+
+    def get_history_ranges(self, dones: torch.Tensor) -> dict[str, list[slice]]:
+        if (dones.shape[0] != self.num_envs) or (dones.ndim != 1):
+            raise ValueError(
+                f"Expect the dones to have a shape of (self.num_envs,) = ({self.num_envs},), got {dones.shape}"
+            )
+        return {
+            history_buffer["name"]: [
+                self._get_history_range(history_buffer, env_idx, bool(done))
+                for env_idx, done in enumerate(dones)
+            ]
+            for history_buffer in self.history_buffers
+        }
 
     def build_history_input(
         self,
@@ -117,24 +158,11 @@ class HistoryManager:
                     [entry[history_key] for entry in input_history_entries if history_key in entry]
                 )
         
-        if (dones.shape[0] != self.num_envs) or (dones.ndim != 1):
-            raise ValueError(
-                f"Expect the dones to have a shape of (self.num_envs,) = ({self.num_envs},), got {dones.shape}"
-            )
+        history_ranges = self.get_history_ranges(dones)
 
         for env_idx, done in enumerate(dones):
             for history_buffer in self.history_buffers:
-                history_range = slice(0, 0)
-                if self.history_counts[env_idx] % history_buffer["input_interval"] == 0:
-                    history_range = slice(
-                        max(0, len(self.history_entries[env_idx]) - history_buffer["history_size"]),
-                        len(self.history_entries[env_idx])
-                    )
-                elif done and history_buffer["input_on_done"]:
-                    history_range = slice(
-                        max(0, len(self.history_entries[env_idx]) - self.history_counts[env_idx] % history_buffer["input_interval"]),
-                        len(self.history_entries[env_idx])
-                    )
+                history_range = history_ranges[history_buffer["name"]][env_idx]
                 append_to_history_input(history_buffer, history_range, env_idx)
                 
             if done:
@@ -146,7 +174,9 @@ class HistoryManager:
 
     def clear_history(self, env_id: int) -> None:
         self.history_entries[env_id].clear()
+        self.history_step_rewards[env_id].clear()
         self.history_counts[env_id] = 0
 
     def trim_history(self, env_idx: int) -> None:
         self.history_entries[env_idx] = self.history_entries[env_idx][-self.max_history_size:]
+        self.history_step_rewards[env_idx] = self.history_step_rewards[env_idx][-self.max_history_size:]
