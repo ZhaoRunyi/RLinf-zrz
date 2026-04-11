@@ -266,6 +266,7 @@ class HistoryVLMRewardModel(VLMRewardModel):
             parsed_rewards = self.reward_parser.parse_rewards(decoded_outputs).to(dtype=torch.float32)
             debug_video_output_dir = self.cfg.get("debug_video_output_dir", None)
             if debug_video_output_dir:
+                reward_worker_rank = os.environ.get("RANK", os.environ.get("LOCAL_RANK", "unknown"))
                 history_buffer_name = self.cfg.get("debug_video_history_buffer_name", self.history_buffer_names[0])
                 history_buffer = micro_history_input.get(history_buffer_name, {})
                 history_key = self.cfg.get("debug_video_history_key", next(iter(history_buffer), None))
@@ -274,7 +275,10 @@ class HistoryVLMRewardModel(VLMRewardModel):
                 for decoded_output, parsed_reward, valid_input_id in zip(decoded_outputs, parsed_rewards, valid_input_ids):
                     if valid_input_id >= len(history_sequences) or not history_sequences[valid_input_id]:
                         continue
-                    output_path = Path(debug_video_output_dir) / f"pid_{os.getpid()}" / f"sample_{self.debug_video_count:06d}.mp4"
+                    local_env_id = start + valid_input_id
+                    output_path = Path(debug_video_output_dir) / (
+                        f"rank_{reward_worker_rank}_env_{local_env_id:04d}_count_{self.debug_video_count:06d}.mp4"
+                    )
                     render_debug_video(
                         history_frames=history_sequences[valid_input_id],
                         footer_lines=[
