@@ -151,6 +151,12 @@ class EmbodiedRunner:
         )
         self.actor.load_checkpoint(actor_checkpoint_path).wait()
         self.global_step = int(resume_dir.split("global_step_")[-1])
+        if (
+            self.reward is not None
+            and self.global_step >= self.cfg.reward.get("use_output_step", 0)
+        ):
+            self.reward_channel = Channel.create("Reward")
+            self.reward_initialized = True
 
     def update_rollout_weights(self):
         rollout_handle: Handle = self.rollout.sync_model_from_actor()
@@ -278,10 +284,10 @@ class EmbodiedRunner:
                 with self.timer("generate_rollouts"):
                     if (
                         self.reward is not None
-                        and self.global_step == self.cfg.reward.get("use_output_step", 0)
+                        and not self.reward_initialized
+                        and self.global_step >= self.cfg.reward.get("use_output_step", 0)
                     ):
-                        print(f"Initializing reward worker at step {self.global_step}")
-                        self.reward.init_worker().wait()
+                        print(f"Activating reward worker at step {self.global_step}")
                         self.reward_channel = Channel.create("Reward")
                         self.reward_initialized = True            
 
