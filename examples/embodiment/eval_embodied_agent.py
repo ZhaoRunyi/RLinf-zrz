@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import json
+import os
 
 import hydra
 import torch.multiprocessing as mp
@@ -35,6 +36,11 @@ def main(cfg) -> None:
     cfg.runner.only_eval = True
     cfg = validate_cfg(cfg)
     print(json.dumps(OmegaConf.to_container(cfg, resolve=True), indent=2))
+    if cfg.env.eval.video_cfg.save_video:
+        print(
+            "[INFO] Eval videos will be written under: "
+            f"{os.path.abspath(cfg.env.eval.video_cfg.video_base_dir)}"
+        )
 
     cluster = Cluster(cluster_cfg=cfg.cluster)
     component_placement = HybridComponentPlacement(cfg, cluster)
