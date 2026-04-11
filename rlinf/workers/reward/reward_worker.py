@@ -228,6 +228,7 @@ class EmbodiedRewardWorker(Worker):
         model_cfg = self.cfg.reward.model
         with open_dict(model_cfg):
             model_cfg.num_envs = self.local_num_train_envs
+            model_cfg.reward_worker_rank = self._rank
         model = reward_cls(model_cfg)
 
         return model

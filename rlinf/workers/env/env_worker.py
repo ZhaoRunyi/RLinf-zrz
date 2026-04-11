@@ -799,8 +799,12 @@ class EnvWorker(Worker):
                 raise ValueError("stage_id is required for history-buffer reward.")
             history_manager = self.train_history_managers[stage_id]
             history_manager.append_to_history_entries(observations)
+            history_frame_end_indices = torch.tensor(
+                history_manager.history_counts, dtype=torch.int32
+            )
             history_input, history_lengths = history_manager.build_history_input(dones=dones)
             reward_input["history_input"] = history_input
+            reward_input["history_frame_end_indices"] = history_frame_end_indices
             self.history_lengths[stage_id] = dict(history_lengths)
 
         if last_run:

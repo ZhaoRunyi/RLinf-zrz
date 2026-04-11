@@ -233,6 +233,9 @@ class HistoryVLMRewardModel(VLMRewardModel):
         reward_input: dict[str, Any],
     ) -> torch.Tensor:
         history_input: dict[str, dict[str, list[list[Any]]]] = reward_input.pop("history_input")
+        history_frame_end_indices: torch.Tensor | None = reward_input.pop(
+            "history_frame_end_indices", None
+        )
         input_batch_size = len(next(iter(next(iter(history_input.values())).values())))
         observations = reward_input
 
@@ -243,6 +246,11 @@ class HistoryVLMRewardModel(VLMRewardModel):
             end = min(start + infer_micro_batch_size, input_batch_size)
             micro_observations = self.slice_observations(observations, start, end)
             micro_history_input = self.slice_history_input(history_input, start, end)
+            micro_history_frame_end_indices = (
+                history_frame_end_indices[start:end]
+                if history_frame_end_indices is not None
+                else None
+            )
             reward_chunk = torch.zeros((end - start,), dtype=torch.float32)
 
             batched_inputs, valid_input_ids = self.input_builder.build_inputs(
@@ -266,7 +274,10 @@ class HistoryVLMRewardModel(VLMRewardModel):
             parsed_rewards = self.reward_parser.parse_rewards(decoded_outputs).to(dtype=torch.float32)
             debug_video_output_dir = self.cfg.get("debug_video_output_dir", None)
             if debug_video_output_dir:
-                reward_worker_rank = os.environ.get("RANK", os.environ.get("LOCAL_RANK", "unknown"))
+                reward_worker_rank = self.cfg.get(
+                    "reward_worker_rank",
+                    os.environ.get("RANK", os.environ.get("LOCAL_RANK", "unknown")),
+                )
                 history_buffer_name = self.cfg.get("debug_video_history_buffer_name", self.history_buffer_names[0])
                 history_buffer = micro_history_input.get(history_buffer_name, {})
                 history_key = self.cfg.get("debug_video_history_key", next(iter(history_buffer), None))
@@ -276,8 +287,17 @@ class HistoryVLMRewardModel(VLMRewardModel):
                     if valid_input_id >= len(history_sequences) or not history_sequences[valid_input_id]:
                         continue
                     local_env_id = start + valid_input_id
+                    history_frame_end_index = (
+                        int(micro_history_frame_end_indices[valid_input_id].item())
+                        if micro_history_frame_end_indices is not None
+                        else 0
+                    )
+                    history_frame_start_index = max(
+                        1,
+                        history_frame_end_index - len(history_sequences[valid_input_id]) + 1,
+                    )
                     output_path = Path(debug_video_output_dir) / (
-                        f"rank_{reward_worker_rank}_env_{local_env_id:04d}_count_{self.debug_video_count:06d}.mp4"
+                        f"rank_{reward_worker_rank}_env_{local_env_id:04d}_frame_{history_frame_start_index:04d}_count_{self.debug_video_count:06d}.mp4"
                     )
                     render_debug_video(
                         history_frames=history_sequences[valid_input_id],
