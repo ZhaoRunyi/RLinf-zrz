@@ -798,48 +798,52 @@ class EnvWorker(Worker):
             if stage_id is None:
                 raise ValueError("stage_id is required for history-buffer reward.")
             history_manager = self.train_history_managers[stage_id]
-            history_step_rewards = env_output.rewards
-            if history_step_rewards is not None and history_step_rewards.ndim > 1:
-                history_step_rewards = history_step_rewards[:, -1]
-            history_step_rewards = (
-                history_step_rewards.to(dtype=torch.float32).detach().cpu()
-                if history_step_rewards is not None
-                else None
-            )
+            history_step_states = observations.get("states")
             history_manager.append_to_history_entries(
                 observations,
-                step_rewards=history_step_rewards,
+                step_states=history_step_states,
             )
             history_ranges = history_manager.get_history_ranges(dones=dones)
-            history_reward_buffer_name = self.cfg.reward.model.get(
-                "env_reward_history_buffer_name",
+            history_value_buffer_name = self.cfg.reward.model.get(
+                "value_model_history_buffer_name",
                 history_manager.history_buffers[0]["name"],
             )
-            if history_reward_buffer_name not in history_ranges:
+            if history_value_buffer_name not in history_ranges:
                 raise ValueError(
-                    f"Unknown env_reward_history_buffer_name: {history_reward_buffer_name}"
+                    f"Unknown value_model_history_buffer_name: {history_value_buffer_name}"
                 )
-            history_reward_ranges = history_ranges[history_reward_buffer_name]
-            history_env_reward_start = torch.zeros(
-                self.train_num_envs_per_stage, dtype=torch.float32
-            )
-            history_env_reward_end = torch.zeros(
-                self.train_num_envs_per_stage, dtype=torch.float32
-            )
-            for env_id, history_range in enumerate(history_reward_ranges):
-                selected_history_step_rewards = history_manager.history_step_rewards[env_id][history_range]
-                if not selected_history_step_rewards:
-                    continue
-                history_env_reward_start[env_id] = selected_history_step_rewards[0]
-                history_env_reward_end[env_id] = selected_history_step_rewards[-1]
+            if history_step_states is not None:
+                history_value_ranges = history_ranges[history_value_buffer_name]
+                history_value_start_states = torch.zeros_like(
+                    history_step_states, dtype=torch.float32
+                )
+                history_value_end_states = torch.zeros_like(
+                    history_step_states, dtype=torch.float32
+                )
+                for env_id, history_range in enumerate(history_value_ranges):
+                    selected_history_states = history_manager.history_step_states[
+                        env_id
+                    ][history_range]
+                    if not selected_history_states or selected_history_states[0] is None:
+                        continue
+                    history_value_start_states[env_id] = torch.as_tensor(
+                        selected_history_states[0], dtype=torch.float32
+                    )
+                    history_value_end_states[env_id] = torch.as_tensor(
+                        selected_history_states[-1], dtype=torch.float32
+                    )
+                reward_input["history_value_start_states"] = history_value_start_states
+                reward_input["history_value_end_states"] = history_value_end_states
+            elif self.cfg.reward.model.model_type == "history_value_delta":
+                raise ValueError(
+                    "history_value_delta reward requires observations['states']."
+                )
             history_frame_end_indices = torch.tensor(
                 history_manager.history_counts, dtype=torch.int32
             )
             history_input, history_lengths = history_manager.build_history_input(dones=dones)
             reward_input["history_input"] = history_input
             reward_input["history_frame_end_indices"] = history_frame_end_indices
-            reward_input["history_env_reward_start"] = history_env_reward_start
-            reward_input["history_env_reward_end"] = history_env_reward_end
             self.history_lengths[stage_id] = dict(history_lengths)
 
         if last_run:

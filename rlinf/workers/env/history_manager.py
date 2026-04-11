@@ -4,7 +4,7 @@ from typing import Any
 
 import torch
 import logging
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig
 
 from rlinf.utils.nested_dict_process import clone_nested_to_cpu
 
@@ -25,7 +25,7 @@ class HistoryManager:
         self.history_entries: list[list[dict[str, Any]]] = [
             [] for _ in range(num_envs)
         ]
-        self.history_step_rewards: list[list[float]] = [[] for _ in range(num_envs)]
+        self.history_step_states: list[list[Any]] = [[] for _ in range(num_envs)]
 
         self.history_counts = [0 for _ in range(num_envs)]
 
@@ -83,15 +83,15 @@ class HistoryManager:
     def append_to_history_entries(
         self,
         observations: dict[str, Any] | None,
-        step_rewards: torch.Tensor | None = None,
+        step_states: torch.Tensor | None = None,
     ) -> None:
         if observations is None:
             return
-        if step_rewards is not None and (
-            step_rewards.ndim != 1 or step_rewards.shape[0] != self.num_envs
+        if step_states is not None and (
+            step_states.ndim < 1 or step_states.shape[0] != self.num_envs
         ):
             raise ValueError(
-                f"Expect step_rewards to have shape ({self.num_envs},), got {step_rewards.shape}"
+                f"Expect step_states to have leading shape ({self.num_envs}, ...), got {step_states.shape}"
             )
         for env_id in range(self.num_envs):
             history_entry = {}
@@ -101,8 +101,8 @@ class HistoryManager:
                     continue
                 history_entry[history_key] = clone_nested_to_cpu(history_values[env_id])
             self.history_entries[env_id].append(history_entry)
-            self.history_step_rewards[env_id].append(
-                float(step_rewards[env_id].item()) if step_rewards is not None else 0.0
+            self.history_step_states[env_id].append(
+                clone_nested_to_cpu(step_states[env_id]) if step_states is not None else None
             )
             self.history_counts[env_id] += 1
 
@@ -174,9 +174,9 @@ class HistoryManager:
 
     def clear_history(self, env_id: int) -> None:
         self.history_entries[env_id].clear()
-        self.history_step_rewards[env_id].clear()
+        self.history_step_states[env_id].clear()
         self.history_counts[env_id] = 0
 
     def trim_history(self, env_idx: int) -> None:
         self.history_entries[env_idx] = self.history_entries[env_idx][-self.max_history_size:]
-        self.history_step_rewards[env_idx] = self.history_step_rewards[env_idx][-self.max_history_size:]
+        self.history_step_states[env_idx] = self.history_step_states[env_idx][-self.max_history_size:]

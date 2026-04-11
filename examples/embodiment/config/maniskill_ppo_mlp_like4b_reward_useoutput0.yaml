@@ -1,4 +1,4 @@
-# RoboChallenge PPO (MLP policy) with env-delta reward aligned to 4B history reward pipeline
+# RoboChallenge PPO (MLP policy) with value-model delta reward aligned to 4B history reward pipeline
 
 defaults:
   - env/maniskill_pick_cube_prompt@env.train
@@ -205,8 +205,9 @@ reward:
   env_reward_weight: 0.0
 
   model:
-    model_type: "history_env_delta"
-    env_reward_history_buffer_name: "history_window"
+    model_type: "history_value_delta"
+    value_model_checkpoint_path: "/mnt/project_rlinf/ztx/RLinf/logs/20260411-20:03:49-maniskill_ppo_mlp/maniskill_ppo_mlp/checkpoints/global_step_1000/actor"
+    value_model_history_buffer_name: "history_window"
     positive_delta_threshold: 0.2
     negative_delta_threshold: -0.2
     neutral_reward: 0.0

@@ -229,6 +229,9 @@ class EmbodiedRewardWorker(Worker):
         with open_dict(model_cfg):
             model_cfg.num_envs = self.local_num_train_envs
             model_cfg.reward_worker_rank = self._rank
+            model_cfg.actor_model_cfg = OmegaConf.to_container(
+                self.cfg.actor.model, resolve=True
+            )
         model = reward_cls(model_cfg)
 
         return model

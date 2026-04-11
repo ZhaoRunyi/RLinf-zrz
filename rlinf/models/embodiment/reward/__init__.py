@@ -16,7 +16,7 @@
 
 from rlinf.models.embodiment.reward.base_image_reward_model import BaseImageRewardModel
 from rlinf.models.embodiment.reward.base_reward_model import BaseRewardModel
-from rlinf.models.embodiment.reward.history_env_delta_reward_model import HistoryEnvDeltaRewardModel
+from rlinf.models.embodiment.reward.history_value_delta_reward_model import HistoryValueDeltaRewardModel
 from rlinf.models.embodiment.reward.resnet_reward_model import ResNetRewardModel
 from rlinf.models.embodiment.reward.vlm_reward_model import VLMRewardModel
 from rlinf.models.embodiment.reward.vlm_reward_model import HistoryVLMRewardModel
@@ -24,7 +24,7 @@ from rlinf.models.embodiment.reward.vlm_reward_model import HistoryVLMRewardMode
 __all__ = [
     "BaseRewardModel",
     "BaseImageRewardModel",
-    "HistoryEnvDeltaRewardModel",
+    "HistoryValueDeltaRewardModel",
     "ResNetRewardModel",
     "VLMRewardModel",
     "HistoryVLMRewardModel",
@@ -34,7 +34,7 @@ reward_model_registry = {
     "resnet": ResNetRewardModel,
     "vlm": VLMRewardModel,
     "history_vlm": HistoryVLMRewardModel,
-    "history_env_delta": HistoryEnvDeltaRewardModel,
+    "history_value_delta": HistoryValueDeltaRewardModel,
 }
 
 

@@ -272,7 +272,10 @@ class HistoryVLMRewardModel(VLMRewardModel):
 
             parsed_rewards = self.reward_parser.parse_rewards(decoded_outputs).to(dtype=torch.float32)
             debug_video_output_dir = self.cfg.get("debug_video_output_dir", None)
-            if debug_video_output_dir:
+            enable_debug_video_output = bool(
+                self.cfg.get("enable_debug_video_output", False)
+            )
+            if enable_debug_video_output and debug_video_output_dir:
                 reward_worker_rank = self.cfg.get(
                     "reward_worker_rank",
                     os.environ.get("RANK", os.environ.get("LOCAL_RANK", "unknown")),
