@@ -240,8 +240,8 @@ reward:
 
     history_buffers:
       history_window:
-        history_size: 10
-        input_interval: 10
+        history_size: 5
+        input_interval: 5
         history_keys: ["main_images"]
         input_on_done: false
       
@@ -251,7 +251,7 @@ reward:
     subprocessor_kwargs:
       video_processor:
         do_sample_frames: True
-        fps: 14.4 # 24.0 * 0.6
+        # fps: 14.4 # 24.0 * 0.6
 
     # Keep generation cheap for RL loop.
     max_new_tokens: 16 # NOTE: mimic examples/agent/coding_online_rl/config/qwen2.5-1.5b-grpo-llm_judge.yaml

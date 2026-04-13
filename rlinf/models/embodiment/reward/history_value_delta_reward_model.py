@@ -116,6 +116,6 @@ class HistoryValueDeltaRewardModel(BaseRewardModel):
             start_values.reshape(-1), fill_value=self.neutral_reward
         )
         value_delta = (end_values - start_values).reshape(-1)
-        reward[value_delta >= self.positive_delta_threshold] = 1.0
-        reward[value_delta <= self.negative_delta_threshold] = -1.0
+        reward[value_delta > self.positive_delta_threshold] = 1.0
+        reward[value_delta < self.negative_delta_threshold] = -1.0
         return reward

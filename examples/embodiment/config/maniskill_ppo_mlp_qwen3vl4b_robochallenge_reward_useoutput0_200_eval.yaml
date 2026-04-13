@@ -44,7 +44,7 @@ runner:
   save_interval: 100
 
   # resume_dir: null # Optional: path to a saved checkpoint directory, such as 'checkpoints/global_step_10'. If not None, it will be used to resume training.
-  resume_dir: "/workspace/RLinf_qwen_reward/logs/20260410-19:14:09-maniskill_ppo_mlp_qwen3vl4b_robochallenge_reward_useoutput0/maniskill_ppo_mlp_qwen3vl4b_robochallenge_reward_useoutput0/checkpoints/global_step_200"
+  resume_dir: "/workspace/RLinf_qwen_reward/logs/20260410-19:14:09-maniskill_ppo_mlp_qwen3vl4b_robochallenge_reward_useoutput0/maniskill_ppo_mlp_qwen3vl4b_robochallenge_reward_useoutput0/checkpoints/global_step_100"
   ckpt_path: null  # Optional: path to a .pt checkpoint. If not None, it will be loaded after the model is instantiated (for evaluation).
 
 algorithm:
@@ -255,7 +255,7 @@ reward:
     subprocessor_kwargs:
       video_processor:
         do_sample_frames: True
-        fps: 14.4 # 24.0 * 0.6
+        # fps: 14.4 # 24.0 * 0.6
 
     # Keep generation cheap for RL loop.
     max_new_tokens: 64 # NOTE: mimic examples/agent/coding_online_rl/config/qwen2.5-1.5b-grpo-llm_judge.yaml

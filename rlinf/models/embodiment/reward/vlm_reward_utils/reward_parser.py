@@ -61,7 +61,7 @@ def _parse_robochallenge_output(text: str, use_confidence: bool) -> float | None
             j = str(judgement).strip().lower()
             if j in ("positive", "negative"):
                 if not use_confidence:
-                    return 1.0 if j == "positive" else 0.0
+                    return 1.0 if j == "positive" else -1.0
 
                 confidence = obj.get("confidence", None)
                 if confidence is None:

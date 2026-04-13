@@ -32,10 +32,10 @@ runner:
     log_path: "../results"
     project_name: rlinf
     experiment_name: "maniskill_ppo_mlp_qwen3vl4b_robochallenge_reward_useoutput0"  
-    # logger_backends: ["wandb", "tensorboard"]
-    logger_backends: ["tensorboard"] # TEST ONLY
+    logger_backends: ["wandb", "tensorboard"]
+    # logger_backends: ["tensorboard"] # TEST ONLY
 
-  max_epochs: 1000
+  max_epochs: 200
   max_steps: -1
 
   only_eval: False
@@ -43,7 +43,8 @@ runner:
   val_check_interval: 50
   save_interval: 100
 
-  resume_dir: null # Optional: path to a saved checkpoint directory, such as 'checkpoints/global_step_10'. If not None, it will be used to resume training.
+  # resume_dir: null # Optional: path to a saved checkpoint directory, such as 'checkpoints/global_step_10'. If not None, it will be used to resume training.
+  resume_dir: "/workspace/RLinf_qwen_reward/logs/20260410-19:14:09-maniskill_ppo_mlp_qwen3vl4b_robochallenge_reward_useoutput0/maniskill_ppo_mlp_qwen3vl4b_robochallenge_reward_useoutput0/checkpoints/global_step_100"
   ckpt_path: null  # Optional: path to a .pt checkpoint. If not None, it will be loaded after the model is instantiated (for evaluation).
 
 algorithm:

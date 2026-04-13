@@ -214,8 +214,8 @@ reward:
 
     history_buffers:
       history_window:
-        history_size: 10
-        input_interval: 10
+        history_size: 5
+        input_interval: 5
         history_keys: ["main_images"]
         input_on_done: false
 
