@@ -176,7 +176,7 @@ algorithm:
   clip_ratio_c: 3.0
   value_clip: 1.0
   huber_delta: 10.0
-  gamma: 0.8
+  gamma: 0.99
   gae_lambda: 0.9
   sampling_params:
     do_sample: true
@@ -214,6 +214,8 @@ reward:
     gt_success_bonus: 20.0
     precision: bf16
     input_builder_name: qwentrend_input_builder
+    input_builder_params:
+      strict_min_frames: 5
     reward_parser_name: qwentrend_reward_parser
     reward_parser_params:
       positive_reward: 1.0
@@ -224,6 +226,7 @@ reward:
     history_buffers:
       history_window:
         history_size: 5
+        min_history_size: 5
         input_interval: 1
         history_keys:
         - main_images

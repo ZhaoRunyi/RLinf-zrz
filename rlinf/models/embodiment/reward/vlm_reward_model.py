@@ -101,6 +101,37 @@ class VLMRewardModel(BaseRewardModel):
             self.cfg.get("reward_parser_name", "base_reward_parser")
         )(**self.cfg.get("reward_parser_params", {}))
 
+    @staticmethod
+    def _success_tensor_from_info(info: Any) -> torch.Tensor | None:
+        def _direct_success_tensor(info_dict: dict[str, Any]) -> torch.Tensor | None:
+            for key in ("success_once", "success_at_end", "success"):
+                value = info_dict.get(key)
+                if value is not None:
+                    return torch.as_tensor(value).reshape(-1).bool()
+            return None
+
+        if isinstance(info, dict):
+            for key in ("episode", "final_info"):
+                value = VLMRewardModel._success_tensor_from_info(info.get(key))
+                if value is not None:
+                    return value
+            return _direct_success_tensor(info)
+
+        if isinstance(info, (list, tuple)):
+            values = []
+            found = False
+            for item in info:
+                value = VLMRewardModel._success_tensor_from_info(item)
+                if value is None:
+                    values.append(False)
+                    continue
+                flat_value = value.reshape(-1)
+                values.append(bool(flat_value.any().item()))
+                found = True
+            if found:
+                return torch.as_tensor(values, dtype=torch.bool)
+        return None
+
     def apply_gt_success_bonus(
         self, rewards: torch.Tensor, reward_input: dict[str, Any]
     ) -> torch.Tensor:
@@ -112,24 +143,7 @@ class VLMRewardModel(BaseRewardModel):
         if not isinstance(env_infos, dict):
             return rewards
 
-        success = None
-        final_info = env_infos.get("final_info", {})
-        for info_dict in (
-            env_infos,
-            env_infos.get("episode"),
-            final_info,
-            final_info.get("episode") if isinstance(final_info, dict) else None,
-        ):
-            if not isinstance(info_dict, dict):
-                continue
-            for key in ("success", "success_at_end", "success_once"):
-                value = info_dict.get(key)
-                if value is not None:
-                    success = torch.as_tensor(value).reshape(-1).bool()
-                    break
-            if success is not None:
-                break
-
+        success = self._success_tensor_from_info(env_infos)
         if success is None or success.shape[0] != rewards.shape[0]:
             return rewards
         bonus = success.to(device=rewards.device, dtype=rewards.dtype)
@@ -219,7 +233,7 @@ class VLMRewardModel(BaseRewardModel):
         )
         del output_ids
         rewards = self.reward_parser.parse_rewards(outputs)
-        return self.apply_gt_success_bonus(rewards, observations)
+        return rewards
 
 
 class HistoryVLMRewardModel(VLMRewardModel):
@@ -330,4 +344,4 @@ class HistoryVLMRewardModel(VLMRewardModel):
             del outputs
 
         rewards = torch.cat(reward_chunks, dim=0)
-        return self.apply_gt_success_bonus(rewards, observations)
+        return rewards

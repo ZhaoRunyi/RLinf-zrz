@@ -78,7 +78,21 @@ class EnvWorker(Worker):
         self.use_external_reward_model = (
             self.use_reward_model and not self.use_realworld_reward
         )
-        self.env_infos_reward_keys = ("success", "episode", "final_info")
+        self.gt_success_bonus = float(
+            self.cfg.get("reward", {}).get("model", {}).get("gt_success_bonus", 0.0)
+        )
+        self.gt_success_reward_threshold = float(
+            self.cfg.get("reward", {})
+            .get("model", {})
+            .get("gt_success_reward_threshold", 10.0)
+        )
+        self.env_infos_reward_keys = (
+            "success",
+            "success_at_end",
+            "success_once",
+            "episode",
+            "final_info",
+        )
         if self.use_external_reward_model:
             self.reward_weight = self.cfg.reward.get("reward_weight", 1.0)
             self.env_reward_weight = self.cfg.reward.get("env_reward_weight", 0.0)
@@ -838,6 +852,12 @@ class EnvWorker(Worker):
             )
         self.send_reward_input(send_channel=send_channel, reward_input=reward_input)
         reward_output = self.recv_reward_results(recv_channel=recv_channel)
+        reward_output = self._apply_gt_success_bonus_to_reward_output(
+            reward_output=reward_output,
+            env_infos=env_output.env_infos,
+            terminations=env_output.terminations,
+            env_rewards=env_output.rewards,
+        )
         if self.reward_mode != "terminal" or reward_output is None:
             return reward_output
         return self._scatter_terminal_reward_output(
@@ -851,6 +871,78 @@ class EnvWorker(Worker):
                 continue
             reward_env_infos[key] = clone_nested_to_cpu(env_infos[key])
         return reward_env_infos
+
+    def _success_tensor_from_info(self, info: Any) -> torch.Tensor | None:
+        def _direct_success_tensor(info_dict: dict[str, Any]) -> torch.Tensor | None:
+            for key in ("success_once", "success_at_end", "success"):
+                value = info_dict.get(key)
+                if value is not None:
+                    return torch.as_tensor(value).reshape(-1).bool()
+            return None
+
+        if isinstance(info, dict):
+            for key in ("episode", "final_info"):
+                value = self._success_tensor_from_info(info.get(key))
+                if value is not None:
+                    return value
+            return _direct_success_tensor(info)
+
+        if isinstance(info, (list, tuple)):
+            values = []
+            found = False
+            for item in info:
+                value = self._success_tensor_from_info(item)
+                if value is None:
+                    values.append(False)
+                    continue
+                values.append(bool(value.reshape(-1).any().item()))
+                found = True
+            if found:
+                return torch.as_tensor(values, dtype=torch.bool)
+        return None
+
+    def _apply_gt_success_bonus_to_reward_output(
+        self,
+        reward_output: torch.Tensor | None,
+        env_infos: dict[str, Any] | None,
+        terminations: torch.Tensor | None = None,
+        env_rewards: torch.Tensor | None = None,
+    ) -> torch.Tensor | None:
+        if (
+            reward_output is None
+            or self.gt_success_bonus == 0.0
+        ):
+            return reward_output
+
+        success = (
+            self._success_tensor_from_info(env_infos)
+            if isinstance(env_infos, dict)
+            else None
+        )
+        if (
+            (success is None or success.shape[0] != reward_output.shape[0])
+            and terminations is not None
+        ):
+            success = terminations.reshape(terminations.shape[0], -1).any(dim=1)
+        if (
+            (
+                success is None
+                or success.shape[0] != reward_output.shape[0]
+                or not success.any()
+            )
+            and env_rewards is not None
+        ):
+            success = (
+                env_rewards.reshape(env_rewards.shape[0], -1).max(dim=1).values
+                >= self.gt_success_reward_threshold
+            )
+        if success is None or success.shape[0] != reward_output.shape[0]:
+            return reward_output
+
+        bonus = success.to(device=reward_output.device, dtype=reward_output.dtype)
+        return reward_output + (bonus * self.gt_success_bonus).view(
+            -1, *([1] * (reward_output.dim() - 1))
+        )
 
     def _scatter_terminal_reward_output(
         self,

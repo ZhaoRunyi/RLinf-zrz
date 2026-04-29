@@ -201,6 +201,13 @@ rollout:
     precision: '32'
   enable_torch_compile: true
   enable_cuda_graph: true
+weight_syncer:
+  type: patch
+  patch:
+    snapshot_device: cpu
+    transport_device: cpu
+    delta_encoding: true
+    compression: none
 reward:
   use_reward_model: false
 critic:
