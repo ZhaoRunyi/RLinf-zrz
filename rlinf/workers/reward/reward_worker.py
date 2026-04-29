@@ -337,7 +337,7 @@ class EmbodiedRewardWorker(Worker):
                     f"{key} batch size {len(value)} != main_images batch size {batch_size}"
                 )
         return batch_size
-    
+
     @Worker.timer("compute_image_rewards")
     def _compute_image_rewards(self, images: torch.Tensor):
         if isinstance(images, np.ndarray):
