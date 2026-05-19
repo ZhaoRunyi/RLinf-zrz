@@ -1,18 +1,23 @@
 #!/usr/bin/env python3
-"""Build final ARM-style clip advantage labels from scored episodes.
+"""Build clip advantage labels from scored RoboChallenge episodes.
 
 This script is fully local: it consumes the GPT/RoboChallenge score reconciliation
 JSONL and does not call any model API.
 
-Final labeling semantics:
+Internal labeling semantics:
 - Stage score is converted into event-sparse score increments anchored near the
   stage achievement time.
 - Retry penalties are included as negative score increments, but retry does not
   hard-flip a clip label. If net score rises during retry, the clip is positive.
-- Clip advantage uses absolute score gain:
+- Clip score gain uses absolute score gain:
     local_gain > margin   -> positive
     local_gain < -margin  -> negative
     otherwise             -> unclear
+
+Training-oriented π0.6/RECAP semantics:
+- ``pi06_advantage_label`` is always binary: positive / negative.
+- Weak-gain clips can be kept as negative or masked with training_weight=0,
+  depending on ``--pi06-unclear-policy``.
 """
 
 from __future__ import annotations
@@ -26,9 +31,9 @@ from typing import Any
 
 import numpy as np
 
-
 INTERVAL_LABEL_TO_ID = {"regressing": -1, "stagnant": 0, "progressing": 1}
 ADVANTAGE_LABEL_TO_ID = {"negative": -1, "unclear": 0, "positive": 1}
+PI06_ADVANTAGE_LABEL_TO_ID = {"negative": 0, "positive": 1}
 
 
 def parse_args() -> argparse.Namespace:
@@ -40,6 +45,16 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--window-size", type=int, default=5, help="Observation samples per clip window.")
     p.add_argument("--stride", type=int, default=1, help="Stride in sampled observations.")
     p.add_argument("--advantage-margin", type=float, default=0.03, help="0-10 score gain margin for clip labels.")
+    p.add_argument(
+        "--pi06-unclear-policy",
+        choices=["discard", "negative"],
+        default="discard",
+        help=(
+            "How to convert weak-gain unclear clips for π0.6-style binary advantage. "
+            "'discard' keeps a binary label but sets pi06_training_weight=0; "
+            "'negative' trains them as Advantage: negative."
+        ),
+    )
     p.add_argument("--interval-margin", type=float, default=0.03, help="0-10 score gain margin for interval labels.")
     p.add_argument("--retry-penalty", type=float, default=0.5)
     p.add_argument("--credit-pre-window-sec", type=float, default=6.0)
@@ -266,6 +281,18 @@ def advantage_label(local_gain: float, margin: float) -> str:
     return "unclear"
 
 
+def pi06_advantage(local_gain: float, margin: float, unclear_policy: str) -> tuple[str, int, float]:
+    """Convert local score gain into π0.6/RECAP-style binary advantage."""
+
+    if local_gain > margin:
+        return "positive", PI06_ADVANTAGE_LABEL_TO_ID["positive"], 1.0
+    if local_gain < -margin:
+        return "negative", PI06_ADVANTAGE_LABEL_TO_ID["negative"], 1.0
+    if unclear_policy == "negative":
+        return "negative", PI06_ADVANTAGE_LABEL_TO_ID["negative"], 1.0
+    return "negative", PI06_ADVANTAGE_LABEL_TO_ID["negative"], 0.0
+
+
 def build_records(result: dict[str, Any], args: argparse.Namespace) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
     duration = episode_duration_sec(result, args.source_fps)
     times = normalized_times(duration, args.sample_fps)
@@ -328,6 +355,11 @@ def build_records(result: dict[str, Any], args: argparse.Namespace) -> tuple[lis
         counts = Counter(label_names)
         local_gain = float(increments[start_idx:end_idx].sum())
         adv = advantage_label(local_gain, float(args.advantage_margin))
+        pi06_label, pi06_label_id, pi06_weight = pi06_advantage(
+            local_gain,
+            float(args.advantage_margin),
+            str(args.pi06_unclear_policy),
+        )
 
         weighted_stage_gain: Counter[str] = Counter()
         stage_counter: Counter[str] = Counter()
@@ -369,6 +401,11 @@ def build_records(result: dict[str, Any], args: argparse.Namespace) -> tuple[lis
                 "advantage_margin": float(args.advantage_margin),
                 "advantage_label": adv,
                 "advantage_label_id": ADVANTAGE_LABEL_TO_ID[adv],
+                "pi06_advantage_label": pi06_label,
+                "pi06_advantage_label_id": pi06_label_id,
+                "pi06_training_weight": pi06_weight,
+                "pi06_prompt_condition": f"Advantage: {pi06_label}",
+                "pi06_unclear_policy": str(args.pi06_unclear_policy),
                 "intervals": clip_intervals,
             }
         )
@@ -410,6 +447,8 @@ def main() -> None:
     interval_label_counts: Counter[str] = Counter()
     clip_majority_counts: Counter[str] = Counter()
     advantage_counts: Counter[str] = Counter()
+    pi06_advantage_counts: Counter[str] = Counter()
+    pi06_trainable_counts: Counter[str] = Counter()
     score_counts: Counter[str] = Counter()
     stage_label_counts: dict[str, Counter[str]] = defaultdict(Counter)
     positive_increments: list[float] = []
@@ -433,6 +472,9 @@ def main() -> None:
                 f_clip.write(json.dumps(rec, ensure_ascii=False) + "\n")
                 clip_majority_counts[str(rec["majority_label"])] += 1
                 advantage_counts[str(rec["advantage_label"])] += 1
+                pi06_advantage_counts[str(rec["pi06_advantage_label"])] += 1
+                if float(rec.get("pi06_training_weight", 0.0)) > 0:
+                    pi06_trainable_counts[str(rec["pi06_advantage_label"])] += 1
                 retry_clip_count += int(bool(rec.get("has_retry")))
             f_dense.write(json.dumps(dense, ensure_ascii=False) + "\n")
 
@@ -464,6 +506,7 @@ def main() -> None:
         "window_size": int(args.window_size),
         "stride": int(args.stride),
         "advantage_margin": float(args.advantage_margin),
+        "pi06_unclear_policy": str(args.pi06_unclear_policy),
         "interval_margin": float(args.interval_margin),
         "credit_pre_window_sec": float(args.credit_pre_window_sec),
         "completion_mass": float(args.completion_mass),
@@ -474,6 +517,8 @@ def main() -> None:
         "interval_label_counts": dict(sorted(interval_label_counts.items())),
         "clip_majority_label_counts": dict(sorted(clip_majority_counts.items())),
         "clip_advantage_label_counts": dict(sorted(advantage_counts.items())),
+        "pi06_advantage_label_counts": dict(sorted(pi06_advantage_counts.items())),
+        "pi06_trainable_label_counts": dict(sorted(pi06_trainable_counts.items())),
         "retry_clip_count": retry_clip_count,
         "positive_increment_quantiles": (
             {}
