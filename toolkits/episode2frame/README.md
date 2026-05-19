@@ -7,7 +7,8 @@ short-clip advantage labels.
 Pipeline:
 
 ```text
-combined multi-view videos
+raw RoboChallenge .rrd directory
+  -> combined multi-view videos + metadata.json
   -> GPT official score reconciliation
   -> stage_scores + retry_events
   -> event-sparse score curve
@@ -21,6 +22,9 @@ does not call any API.
 
 Main files:
 
+- `prepare_robochallenge_combined_videos.py`: decodes raw RoboChallenge RRD
+  rollouts into GPT-readable horizontally stacked multi-view MP4 files plus
+  per-episode `metadata.json`.
 - `gpt55_robochallenge_annotate_combined.py`: shared OpenAI-compatible client,
   contact-sheet construction, and combined-video record loading.
 - `gpt55_official_score_reconcile.py`: calls GPT to infer stage completion,

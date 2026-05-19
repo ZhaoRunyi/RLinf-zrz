@@ -37,7 +37,8 @@ Retry does **not** flip the label. If score rises during retry, the clip is posi
 ## High-Level Flow
 
 ```text
-combined multi-view videos
+raw RoboChallenge .rrd directory
+  -> combined multi-view videos + metadata.json
   -> GPT official score reconciliation
   -> stage_scores + retry_events
   -> event-sparse score_increment
@@ -48,6 +49,31 @@ combined multi-view videos
 ```
 
 ## Main Scripts
+
+### 0. Prepare combined videos from raw RoboChallenge data
+
+```text
+toolkits/episode2frame/prepare_robochallenge_combined_videos.py
+```
+
+Purpose:
+- Starts from a raw RoboChallenge directory such as
+  `/vepfs-mlp2/c20250301/240403026/robochallenge`.
+- Reads `manifest.json` plus `run_*/rollout_*.rrd`.
+- Decodes front/left/right Rerun video streams.
+- Writes one `views_hstack.mp4` and one `metadata.json` per rollout.
+- Does not call any API.
+
+Main output:
+
+```text
+logs/episode2frame/put_cup_on_coaster_combined_videos/
+  000000_<rollout_id>/
+    views_hstack.mp4
+    metadata.json
+  episodes.jsonl
+  prepare_summary.json
+```
 
 ### 1. Official score reconciliation
 
@@ -132,7 +158,46 @@ http://127.0.0.1:6011/
 
 ## Step-By-Step Usage
 
-### Step 0: Inputs
+### Step 0: Prepare inputs from raw RoboChallenge RRD files
+
+Start from the raw downloaded RoboChallenge directory:
+
+```bash
+cd /c20250301/zhoutianxing/RLinf-arm-clip-labeling-only
+
+/vepfs-mlp2/c20250301/240403026/robochallenge/rrd2lerobot_venv/bin/python \
+  toolkits/episode2frame/prepare_robochallenge_combined_videos.py \
+  --data-dir /vepfs-mlp2/c20250301/240403026/robochallenge \
+  --output-dir logs/episode2frame/put_cup_on_coaster_combined_videos \
+  --task put_cup_on_coaster \
+  --fps 5 \
+  --height 360 \
+  --num-workers 8
+```
+
+For a quick smoke test:
+
+```bash
+/vepfs-mlp2/c20250301/240403026/robochallenge/rrd2lerobot_venv/bin/python \
+  toolkits/episode2frame/prepare_robochallenge_combined_videos.py \
+  --data-dir /vepfs-mlp2/c20250301/240403026/robochallenge \
+  --output-dir logs/episode2frame/put_cup_on_coaster_combined_videos_smoke \
+  --task put_cup_on_coaster \
+  --fps 5 \
+  --height 360 \
+  --limit 3 \
+  --num-workers 2 \
+  --overwrite
+```
+
+Use the `rrd2lerobot_venv` Python for the current VEPFS dump because those RRD
+files were written by Rerun 0.24.x. The default RLinf environment may contain an
+older `rerun_bindings` that can list schemas but cannot decode those recordings.
+The script automatically handles the local layout where the manifest run
+directories exist at the root but the heavy `.rrd` files live under
+`rrd_run_dirs/run_*/`.
+
+The GPT scripts read this output directory directly.
 
 Combined videos should exist at:
 
