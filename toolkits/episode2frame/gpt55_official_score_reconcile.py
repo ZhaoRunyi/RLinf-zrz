@@ -20,17 +20,43 @@ from toolkits.episode2frame.gpt55_robochallenge_annotate_combined import (
     load_records,
 )
 
-RUBRIC = {
-    "task_name": "put_cup_on_coaster",
-    "prompt": "place the cup on the coaster",
-    "max_score": 10.0,
-    "scoring": [
-        {"stage_id": "s1_pick_up_cup", "stage": "Pick up the cup", "points": 4.0, "critical": True},
-        {"stage_id": "s2_move_to_destination", "stage": "Move the cup to the destination", "points": 2.0, "critical": True},
-        {"stage_id": "s3_place_on_coaster", "stage": "Place the cup correctly on the coaster", "points": 3.0, "critical": True},
-        {"stage_id": "s4_reset_arm", "stage": "Reset the robotic arm", "points": 1.0, "critical": False},
-    ],
-    "retry_penalty": "For each visible retry after a failed attempt in a stage, subtract 0.5 points from that stage. If a stage score drops below 0 or consecutive failures exceed 4, the rollout may terminate.",
+RUBRICS = {
+    "put_cup_on_coaster": {
+        "task_name": "put_cup_on_coaster",
+        "prompt": "place the cup on the coaster",
+        "max_score": 10.0,
+        "known_score_optional": False,
+        "scoring": [
+            {"stage_id": "s1_pick_up_cup", "stage": "Pick up the cup", "points": 4.0, "critical": True},
+            {"stage_id": "s2_move_to_destination", "stage": "Move the cup to the destination", "points": 2.0, "critical": True},
+            {"stage_id": "s3_place_on_coaster", "stage": "Place the cup correctly on the coaster", "points": 3.0, "critical": True},
+            {"stage_id": "s4_reset_arm", "stage": "Reset the robotic arm", "points": 1.0, "critical": False},
+        ],
+        "retry_penalty": "For each visible retry after a failed attempt in a stage, subtract 0.5 points from that stage. If a stage score drops below 0 or consecutive failures exceed 4, the rollout may terminate.",
+    },
+    "fold_towel_single_subtask": {
+        "task_name": "fold_towel_single_subtask",
+        "prompt": "fold the towel",
+        "max_score": 10.0,
+        "known_score_optional": False,
+        "scoring": [
+            {"stage_id": "s1_fold_towel_complete", "stage": "Complete the full towel folding task", "points": 10.0, "critical": True},
+        ],
+        "retry_penalty": "For each visible retry after a failed attempt in a stage, subtract 0.5 points from that stage.",
+    },
+    "fold_towel_multisubtask": {
+        "task_name": "fold_towel_multisubtask",
+        "prompt": "fold the towel",
+        "max_score": 10.0,
+        "known_score_optional": True,
+        "scoring": [
+            {"stage_id": "s1_grasp_two_corners_and_spread", "stage": "Grasp two towel corners and spread the towel flat", "points": 1.0, "critical": True},
+            {"stage_id": "s2_first_forward_fold", "stage": "Fold the towel forward for the first time", "points": 3.0, "critical": True},
+            {"stage_id": "s3_second_forward_fold", "stage": "Fold the towel forward for the second time", "points": 3.0, "critical": True},
+            {"stage_id": "s4_leftward_fold", "stage": "Fold the towel leftward", "points": 3.0, "critical": True},
+        ],
+        "retry_penalty": "For each visible retry after a failed attempt in a stage, subtract 0.5 points from that stage.",
+    },
 }
 
 SYSTEM = """You are a strict RoboChallenge official-score reconciler.
@@ -45,7 +71,8 @@ Scoring protocol:
 - Do not count harmless waiting/static frames as retries.
 - "Reset the robotic arm" is a scoring stage; it is different from retry count.
 - Compute the score as sum(max(stage_points_if_completed - 0.5 * retry_count, 0) for each stage).
-- The known rollout score is an official constraint. If your visual estimate disagrees, first state the visual estimate, then provide a reconciled retry/stage allocation whose computed_score matches the known score as closely as possible without inventing impossible evidence.
+- If a known rollout score is provided, it is an official constraint. If your visual estimate disagrees, first state the visual estimate, then provide a reconciled retry/stage allocation whose computed_score matches the known score as closely as possible without inventing impossible evidence.
+- If the known rollout score is null, compute the score directly from the visible stage completion and retry evidence.
 - Return valid JSON only.
 """
 
@@ -137,7 +164,7 @@ def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--combined-dir", default="logs/episode2frame/put_cup_on_coaster_combined_videos")
     p.add_argument("--output-dir", required=True)
-    p.add_argument("--task", default="put_cup_on_coaster")
+    p.add_argument("--task", choices=sorted(RUBRICS), default="put_cup_on_coaster")
     p.add_argument("--model", default="gpt-5.5")
     p.add_argument("--api-key-env", default="OPENAI_API_KEY")
     p.add_argument("--base-url-env", default="OPENAI_BASE_URL")
@@ -164,7 +191,11 @@ def safe_stem(text: str) -> str:
 
 
 def unique_records(records: list[dict[str, Any]], task: str) -> list[dict[str, Any]]:
-    records = [r for r in records if str(r.get("task")) == task]
+    rubric = RUBRICS[task]
+    task_aliases = {task, str(rubric.get("task_name"))}
+    if task.startswith("fold_towel"):
+        task_aliases.add("fold_towel")
+    records = [r for r in records if str(r.get("task")) in task_aliases]
     unique = []
     seen_paths = set()
     for r in records:
@@ -181,18 +212,23 @@ def episode_group(record: dict[str, Any]) -> str:
     return safe_stem(Path(record["path"]).parent.name)
 
 
+def record_score(record: dict[str, Any]) -> float:
+    value = record.get("score", 0.0)
+    return 0.0 if value is None else float(value)
+
+
 def choose_records(records: list[dict[str, Any]], args: argparse.Namespace) -> list[tuple[str, dict[str, Any]]]:
     unique = unique_records(records, args.task)
     if args.episode_id:
         wanted = set(args.episode_id)
         unique = [r for r in unique if str(r.get("episode_id")) in wanted or episode_group(r) in wanted]
     if args.score_min is not None:
-        unique = [r for r in unique if float(r.get("score", 0.0)) >= float(args.score_min)]
+        unique = [r for r in unique if record_score(r) >= float(args.score_min)]
     if args.score_max is not None:
-        unique = [r for r in unique if float(r.get("score", 0.0)) <= float(args.score_max)]
+        unique = [r for r in unique if record_score(r) <= float(args.score_max)]
 
     if args.sort_by == "score":
-        unique.sort(key=lambda r: (float(r.get("score", 0.0)), episode_group(r)))
+        unique.sort(key=lambda r: (record_score(r), episode_group(r)))
     elif args.sort_by == "duration_desc":
         unique.sort(key=lambda r: (-max((r.get("frame_counts") or {}).values() or [0]), episode_group(r)))
     else:
@@ -213,7 +249,7 @@ def choose_records(records: list[dict[str, Any]], args: argparse.Namespace) -> l
                 min(
                     unique,
                     key=lambda r: (
-                        abs(float(r.get("score", 0.0)) - target),
+                        abs(record_score(r) - target),
                         -max((r.get("frame_counts") or {}).values() or [0]),
                     ),
                 ),
@@ -267,12 +303,12 @@ def redacted(payload: dict[str, Any]) -> dict[str, Any]:
     return data
 
 
-def build_prompt(group: str, record: dict[str, Any], frame_meta: list[dict[str, Any]]) -> str:
+def build_prompt(group: str, record: dict[str, Any], frame_meta: list[dict[str, Any]], rubric: dict[str, Any]) -> str:
     body = {
         "episode_group": group,
         "episode_id": record.get("episode_id"),
-        "known_rollout_score": float(record.get("score", 0.0)),
-        "task": RUBRIC,
+        "known_rollout_score": None if rubric.get("known_score_optional") else float(record.get("score") or 0.0),
+        "task": rubric,
         "video_metadata": {
             "layout": "Each attached image is a 512-sample grid page. Each tile contains horizontally stacked multi-view frames. Tile labels show #sample_id, source frame, and t=seconds.",
             "frame_counts": record.get("frame_counts"),
@@ -287,10 +323,78 @@ def build_prompt(group: str, record: dict[str, Any], frame_meta: list[dict[str, 
             "If the evidence is a range like t=a-b, choose the earliest time in the range where the criterion itself is already visible, not the end of the range.",
             "Count visible retries per stage. Do not count static waiting as retry.",
             "Compute base_points_awarded, retry_penalty = 0.5 * retry_count, and final_points for each stage.",
-            "Make computed_score equal the official known_rollout_score if the video evidence can reasonably support it; otherwise make the closest score and explain the mismatch.",
+            "If known_rollout_score is a number, make computed_score equal it if the video evidence can reasonably support it; otherwise make the closest score and explain the mismatch.",
+            "If known_rollout_score is null, compute the score directly from visible stage completion and retry evidence.",
         ],
     }
     return json.dumps(body, ensure_ascii=False, indent=2)
+
+
+def record_duration_sec(record: dict[str, Any]) -> float:
+    if record.get("duration_sec") is not None:
+        return float(record["duration_sec"])
+    frame_counts = record.get("frame_counts") or {}
+    if frame_counts:
+        return max(float(value) for value in frame_counts.values()) / float(record.get("fps") or 5.0)
+    return 0.0
+
+
+def local_single_subtask_result(group: str, record: dict[str, Any]) -> dict[str, Any]:
+    score = record_score(record)
+    done = score > 0.0
+    end_time = record_duration_sec(record)
+    stage = {
+        "stage_id": "s1_fold_towel_complete",
+        "stage_name": "Complete the full towel folding task",
+        "max_points": 10.0,
+        "completed": done,
+        "first_achievement_time_sec": end_time if done else None,
+        "completion_time_sec": end_time if done else None,
+        "stable_confirmation_time_sec": end_time if done else None,
+        "base_points_awarded": 10.0 if done else 0.0,
+        "retry_count": 0,
+        "retry_penalty": 0.0,
+        "final_points": 10.0 if done else 0.0,
+        "evidence": "local final success/fail GT; success is anchored at video end",
+        "uncertainty": "no GPT visual timing used for single-subtask route",
+    }
+    return {
+        "episode_group": group,
+        "episode_id": str(record["episode_id"]),
+        "known_rollout_score": score,
+        "visual_estimated_score_before_reconcile": score,
+        "computed_score": score,
+        "score_matches_known": True,
+        "score_difference": 0.0,
+        "total_retry_count": 0,
+        "reset_arm_stage_completed": False,
+        "success_prediction": done,
+        "stage_scores": [stage],
+        "retry_events": [],
+        "reconciliation_notes": "Generated locally for FoldTowel single-subtask final success/fail route.",
+        "combined_video_path": record["path"],
+        "source_metadata_path": str(Path(record["path"]).parent / "metadata.json"),
+        "frame_counts": record.get("frame_counts"),
+    }
+
+
+def write_local_single_subtask_results(
+    jobs: list[tuple[str, dict[str, Any]]],
+    *,
+    summary: Path,
+    resp_dir: Path,
+) -> None:
+    for done_count, (group, record) in enumerate(jobs, start=1):
+        result = local_single_subtask_result(group, record)
+        stem = safe_stem(f"{group}_{record['episode_id']}")
+        (resp_dir / f"{stem}.json").write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+        with summary.open("a", encoding="utf-8") as file:
+            file.write(json.dumps(result, ensure_ascii=False) + "\n")
+        print(
+            f"[done] {done_count}/{len(jobs)} {group} known={result.get('known_rollout_score')} "
+            f"computed={result.get('computed_score')} match=True retries=0 local_single=True",
+            flush=True,
+        )
 
 
 def main() -> None:
@@ -320,6 +424,10 @@ def main() -> None:
     if not jobs:
         print(f"[write] {summary}", flush=True)
         return
+    if args.task == "fold_towel_single_subtask":
+        write_local_single_subtask_results(jobs, summary=summary, resp_dir=resp_dir)
+        print(f"[write] {summary}", flush=True)
+        return
     client = get_client(args.api_key_env, os.environ.get(args.base_url_env))
     lock = threading.Lock()
     progress = {"done": 0, "total": len(jobs)}
@@ -327,17 +435,21 @@ def main() -> None:
     def worker(job: tuple[Any, ...]) -> dict[str, Any]:
         group, record = job
         images, frame_meta = ensure_images(group, record, args, media_dir)
-        prompt = build_prompt(group, record, frame_meta)
+        rubric = RUBRICS[args.task]
+        prompt = build_prompt(group, record, frame_meta, rubric)
         payload = request_payload(args.model, prompt, images)
         stem = safe_stem(f"{group}_{record['episode_id']}")
         (req_dir / f"{stem}.request.json").write_text(json.dumps(redacted(payload), ensure_ascii=False, indent=2), encoding="utf-8")
         parsed, raw = call_model(client, payload)
         (resp_dir / f"{stem}.raw.json").write_text(json.dumps(raw, ensure_ascii=False, indent=2), encoding="utf-8")
+        known_score = record.get("score")
+        if RUBRICS[args.task].get("known_score_optional"):
+            known_score = parsed.get("computed_score", known_score)
         result = {
             **parsed,
             "episode_group": group,
             "episode_id": str(record["episode_id"]),
-            "known_rollout_score": float(record.get("score", 0.0)),
+            "known_rollout_score": float(known_score or 0.0),
             "combined_video_path": record["path"],
             "source_metadata_path": str(Path(record["path"]).parent / "metadata.json"),
             "frame_counts": record.get("frame_counts"),
